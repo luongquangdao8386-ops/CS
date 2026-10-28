@@ -1283,3 +1283,4 @@ svg.ring { width: 92px; height: 92px; }
 .paper-tile span span { display: inline; font-size: inherit; }
 .mgrid .gc-h.today { background: var(--yellow); color: var(--navy); }
 @media (min-width: 900px) { .home-web { grid-template-columns: minmax(0, 1fr) 400px; } }
+.ci-photo .btn { gap: 6px; }
