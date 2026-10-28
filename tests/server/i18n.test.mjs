@@ -23,6 +23,8 @@ test('khóa nhãn viết thẳng trong mã đều có trong từ điển', () =>
       if (!labels[k]) missing.add(`${k} (${path.basename(f)})`);
     }
     for (const m of src.matchAll(/\b(?:bi|biText|badge)\(\s*'([a-z][a-z0-9_]*)'/g)) if (!labels[m[1]]) missing.add(`${m[1]} (${path.basename(f)})`);
+    // Khóa truyền vào hàm vẽ nhãn (askPin) — có thể trùng tên action (vd auth.reauth) nên không bị bỏ qua như trên
+    for (const m of src.matchAll(/\b(?:bi|biText|badge|askPin)\(\s*'([a-z][a-z0-9_.]*)'\s*[,)]/g)) if (!labels[m[1]]) missing.add(`${m[1]} (${path.basename(f)})`);
   }
   assert.deepEqual([...missing], []);
 });

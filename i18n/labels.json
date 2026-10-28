@@ -662,5 +662,6 @@
   "sample.done": ["Đã tạo {M} máy, {T} mẫu checksheet", "已创建{M}台设备、{T}个点检模板"],
   "sample.already": ["Đã có dữ liệu mẫu", "示例数据已存在"],
   "sample.pins": ["PIN tạm của tài khoản mẫu (đổi khi đăng nhập lần đầu, chỉ hiện một lần):", "示例账户临时PIN（首次登录时修改，仅显示一次）："],
-  "ie.collapse": ["Thu gọn", "收起"]
+  "ie.collapse": ["Thu gọn", "收起"],
+  "auth.reauth": ["Nhập lại PIN để tiếp tục", "请重新输入PIN以继续"]
 }
