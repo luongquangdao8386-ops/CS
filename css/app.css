@@ -311,23 +311,37 @@ main { padding: 10px 12px 24px; max-width: 1100px; margin: 0 auto; }
 .hdr-actions { display: flex; gap: 2px; }
 .hdr-status { display: none; }
 .app.is-home .hdr { display: none; }
-.view { padding: 10px 12px calc(var(--safe-bottom) + 92px); max-width: 1400px; margin: 0 auto; }
-.app.is-home .view { padding: 0 0 calc(var(--safe-bottom) + 92px); }
+.view { padding: 10px 12px calc(var(--safe-bottom) + 104px); max-width: 1400px; margin: 0 auto; }
+.app.is-home .view { padding: 0 0 calc(var(--safe-bottom) + 104px); }
 
-/* thanh điều hướng 5 nút (iPhone) */
+/* thanh điều hướng 5 nút (iPhone) — cùng cỡ với M&E d4.14/d4.15: chữ Việt 13 px, Trung 12 px, biểu tượng 28 px; nút đang mở có vạch navy
+   phía trên; ô vàng Quét QR to, nhô lên khỏi thanh ~14 px (viền trắng + bóng) mà thanh không cao thêm, chữ thẳng hàng */
 .bnav {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: repeat(5, 1fr);
-  background: #fff; border-top: 1px solid var(--line); padding: 4px 2px calc(var(--safe-bottom) + 4px);
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  background: #fff; border-top: 1px solid var(--line); padding: 6px 2px calc(var(--safe-bottom) + 6px); box-shadow: 0 -2px 10px rgba(23,50,79,0.06);
 }
-.bnav-item { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px; min-height: 52px; padding: 4px 2px 2px;
-  border: 0; background: none; color: var(--graphite); cursor: pointer; font-size: 0.65625rem; line-height: 1.15; text-align: center; }
-.bnav-item svg { width: 24px; height: 24px; }
-.bnav-item .bnav-label .vi, .bnav-item .bnav-label .zh { display: block; }
+.bnav-item { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; min-height: 64px; padding: 4px 1px 2px; min-width: 0;
+  border: 0; background: none; color: var(--graphite); cursor: pointer; font-size: 0.8125rem; line-height: 1.15; text-align: center; }
+.bnav-item svg { width: 28px; height: 28px; flex: none; }
+.bnav-item .bnav-label .vi, .bnav-item .bnav-label .zh { display: block; white-space: nowrap; }
+.bnav-item .bnav-label .zh { font-size: 0.75rem; }
 .bnav-item .bnav-label .sep { display: none; }
 .bnav-item.active { color: var(--navy); font-weight: 700; }
+.bnav-item.active::before { content: ''; position: absolute; top: -6px; left: 22%; right: 22%; height: 3px; border-radius: 0 0 3px 3px; background: var(--navy); }
 .bnav-item .soon { font-size: 0.59375rem; margin-top: 0; }
-.bnav-scan-box { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 32px; border-radius: 9px; background: var(--yellow); color: var(--navy); }
+.bnav-scan-box { display: inline-flex; align-items: center; justify-content: center; width: 68px; height: 52px; margin-top: -24px; border-radius: 16px;
+  background: var(--yellow); color: var(--navy); flex: none; border: 3px solid #fff; box-shadow: 0 3px 10px rgba(23,50,79,0.22); }
+.bnav-scan-box svg { width: 32px; height: 32px; }
+.bnav-scan:active .bnav-scan-box { transform: translateY(1px); box-shadow: 0 1px 5px rgba(23,50,79,0.22); }
 .bnav-scan { color: var(--navy); font-weight: 700; }
+/* Màn hẹp (iPhone SE, 320–360 px): chữ nhỏ lại một chút để "Bảng tháng", "Tài khoản" không xuống dòng */
+@media (max-width: 360px) {
+  .bnav-item { font-size: 0.75rem; }
+  .bnav-item .bnav-label .zh { font-size: 0.6875rem; }
+  .bnav-item svg { width: 26px; height: 26px; }
+  .bnav-scan-box { width: 60px; height: 48px; margin-top: -22px; }
+  .bnav-scan-box svg { width: 30px; height: 30px; }
+}
 
 /* trang chủ */
 /* Ảnh nền cao theo bề ngang (gần trọn ảnh 16:9 trên iPhone), thẻ bên dưới chỉ chồng lên mép ảnh, lớp mờ chỉ ở 12% cuối */
@@ -692,7 +706,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 
 /* việc chờ tôi (C3/C4): số trên nút Công việc, ô Chờ bạn xử lý, dòng nhắc trong danh sách */
 .bnav-item, .side-item { position: relative; }
-.nav-badge { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: #fff; font-size: 0.6875rem; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+.nav-badge { position: absolute; top: 0; left: calc(50% + 8px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: #fff; font-size: 0.6875rem; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
 .side-item .nav-badge { position: static; margin-left: auto; }
 .pending-me .list li { padding: 0; }
 .pending-me .link-row { gap: 8px; flex-wrap: wrap; padding: 8px 0; }
@@ -1027,7 +1041,6 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
  * Checksheet: phần riêng (trang Hôm nay, màn kiểm, bảng tháng, mẫu, báo cáo)
  * ===================================================================== */
 :root { --ok-bg: #E3F4EA; --ok-bd: #BFE0CC; --warn-bg: #FFF4D6; --warn-bd: #EFD58C; --fail-bg: #FDECEA; --fail-bd: #E8A39A; --empty-in: #C9D1DA; }
-.bnav.bnav4 { grid-template-columns: repeat(4, 1fr); }
 .row.between { justify-content: space-between; align-items: center; }
 .grow { flex: 1; }
 .link-btn { border: 0; background: none; color: #1F5FBF; padding: 6px 0; cursor: pointer; font-size: 0.875rem; }
@@ -1138,8 +1151,8 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .ci-note textarea { width: 100%; }
 .ci-photo { margin-top: 6px; align-items: center; }
 .ci-tell { margin-top: 4px; color: var(--red); }
-.ck-spacer { height: 150px; }
-.ck-bar { position: fixed; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 64px); z-index: 25; background: #fff; border-top: 1px solid var(--line); padding: 8px 14px 10px; box-shadow: 0 -4px 14px rgba(23,50,79,0.08); }
+.ck-spacer { height: 160px; }
+.ck-bar { position: fixed; left: 0; right: 0; bottom: calc(var(--safe-bottom) + 80px); z-index: 25; background: #fff; border-top: 1px solid var(--line); padding: 8px 14px 10px; box-shadow: 0 -4px 14px rgba(23,50,79,0.08); }
 .ck-bar .btn.block { margin-top: 6px; min-height: 48px; }
 .ck-sum { display: flex; gap: 12px; flex-wrap: wrap; font-weight: 700; }
 .ck-left { color: var(--amber); margin-top: 2px; }
