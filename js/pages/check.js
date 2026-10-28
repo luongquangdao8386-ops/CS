@@ -66,7 +66,7 @@ function lastStartedShiftPeriod(tpl, sh) {
 }
 
 export async function renderCheck(view, { shell, params, query }) {
-  shell.setScreen({ title: 'check.title', back: '/' });
+  shell.setScreen({ title: 'check.title', back: '/today' });
   const asg = await byId('ASSIGNMENT', params.assignment);
   const tpl = asg && await byId('TEMPLATE', asg.template_id);
   const mac = asg && await byId('MACHINE', asg.machine_id);
@@ -407,7 +407,7 @@ export async function renderCheck(view, { shell, params, query }) {
       await clearFormDraft(draftKey);
       toast(bi(s.fail ? 'chk.saved_fail' : 'chk.saved'), 'ok');
       await updateSyncStatus();
-      navigate('/', { replace: true });
+      navigate('/today', { replace: true });
       if (navigator.onLine && !app.offline) syncNow({ quiet: true }).then(refreshAfterSend);
     } catch (err) {
       sv.disabled = false;

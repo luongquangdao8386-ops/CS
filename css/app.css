@@ -1284,3 +1284,16 @@ svg.ring { width: 92px; height: 92px; }
 .mgrid .gc-h.today { background: var(--yellow); color: var(--navy); }
 @media (min-width: 900px) { .home-web { grid-template-columns: minmax(0, 1fr) 400px; } }
 .ci-photo .btn { gap: 6px; }
+/* Trang chủ: lịch tuần (số phiếu theo kết quả), ô Quét nổi bật */
+a.day { display: block; text-decoration: none; color: inherit; }
+.day-item.wk-ok { background: var(--ok-bg); color: var(--green); font-weight: 700; }
+.day-item.wk-warn { background: var(--warn-bg); color: #7A4D00; font-weight: 700; }
+.day-item.wk-fail { background: var(--fail-bg); color: #9B2C20; font-weight: 700; }
+.day-item.wk-missed { background: #EEF1F4; color: var(--graphite); font-weight: 700; }
+.day-item.wk-plan { background: #E6EDF5; color: var(--navy); }
+.day-item.wk-plan .sep { display: none; }
+.day-item.wk-plan .zh { display: none; }
+.home-week .cal-legend { margin-top: 6px; }
+.tile-scan { font: inherit; cursor: pointer; background: var(--yellow) !important; border-color: var(--yellow) !important; color: var(--navy); }
+.tile-scan .tile-label .zh, .tile-scan .tile-count { color: var(--navy); }
+.tile .t-red-text { color: var(--red); font-weight: 700; }

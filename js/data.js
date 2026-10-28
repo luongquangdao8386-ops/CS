@@ -2,7 +2,7 @@
 // danh sách máy phải kiểm kỳ này, việc chờ Trưởng bộ phận (bất thường, bỏ sót, xác nhận ngày)
 import { session, todayVN } from './core.js';
 import { getRecords, getMeta, queueItems, KEY } from './sync.js';
-import { shiftsFrom, currentPeriod, endedPeriods, periodKey, addDaysIso, shiftAt } from './judge.js';
+import { shiftsFrom, currentPeriod, endedPeriods, periodKey, periodSpan, addDaysIso, shiftAt } from './judge.js';
 
 export { KEY };
 
@@ -186,6 +186,45 @@ export async function dueList({ all = false } = {}) {
     });
   }
   out.sort((x, y) => String(x.mac.machine_code).localeCompare(String(y.mac.machine_code)) || String(x.tpl.template_code).localeCompare(String(y.tpl.template_code)));
+  return out;
+}
+
+/**
+ * Tóm tắt từng ngày cho lịch tuần của trang chủ (mẫu theo ca và theo ngày, khu vực phụ trách):
+ * [{date, due, ok, warn, fail, partial, missed, excused, pending}] — pending: kỳ chưa hết, chưa kiểm
+ */
+export async function weekSummary(from, days = 7) {
+  const sh = shifts();
+  const now = nowMs();
+  const [tpls, macs, runIdx] = [await mapOf('TEMPLATE'), await mapOf('MACHINE'), await runIndex()];
+  const reasons = new Set((await recs('MISSED')).map((m) => m.assignment_id + '|' + m.period_key));
+  const asgs = (await recs('ASSIGNMENT')).filter((a) => {
+    const t = tpls.get(a.template_id), m = macs.get(a.machine_id);
+    return a.active && t && m && t.active && m.active && inMyAreas(m.area_id) && (t.frequency === 'SHIFT' || t.frequency === 'DAY');
+  });
+  const out = [];
+  for (let i = 0; i < days; i++) {
+    const d = addDaysIso(from, i);
+    const x = { date: d, due: 0, ok: 0, warn: 0, fail: 0, partial: 0, missed: 0, excused: 0, pending: 0 };
+    for (const a of asgs) {
+      if (a.start_date && d < a.start_date) continue;
+      const t = tpls.get(a.template_id);
+      for (const s of t.frequency === 'SHIFT' ? String(t.shifts || '').split(',').filter(Boolean) : ['']) {
+        const k = a.assignment_id + '|' + periodKey(t.frequency, d, s);
+        x.due++;
+        const r = runIdx.get(k);
+        if (r) {
+          if (r.status === 'PARTIAL') x.partial++;
+          else if (r.fail_count) x.fail++;
+          else if (r.warn_count) x.warn++;
+          else x.ok++;
+        } else if (reasons.has(k)) x.excused++;
+        else if (periodSpan(t.frequency, { date: d, last: d }, s, sh).end <= now) x.missed++;
+        else x.pending++;
+      }
+    }
+    out.push(x);
+  }
   return out;
 }
 

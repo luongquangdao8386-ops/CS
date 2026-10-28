@@ -5,7 +5,7 @@ import { ICON, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, today, nowMs, shifts, localFrom, weekday, inMyAreas, users, userName } from '../data.js';
 import { monthPeriods, periodSpan, fmtNumVi, stdText, stdBounds, numOrNull } from '../judge.js';
-import { stateBadge } from './home.js';
+import { stateBadge } from './today.js';
 
 const state = { m: '', ym: '', t: '', shift: '', item: '', day: '' };
 

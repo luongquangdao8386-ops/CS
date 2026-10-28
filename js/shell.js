@@ -3,9 +3,10 @@ import { bi, biText, esc, fmtDate, fmtDateTime, session, badge, L } from './core
 import { ICON, h, $, $$ } from './ui.js';
 import { isIosSafariTab } from './auth.js';
 
-/** Nav dưới của iPhone: Hôm nay · Quét · Bảng tháng · Tài khoản */
+/** Nav dưới của iPhone (5 nút như M&E): Trang chủ · Kiểm tra · Quét · Bảng tháng · Tài khoản */
 const NAV = [
   { key: 'home', label: 'nav.home', icon: 'home', path: '/' },
+  { key: 'today', label: 'nav.today', icon: 'checklist', path: '/today' },
   { key: 'scan', label: 'nav.scan', icon: 'scan' },
   { key: 'month', label: 'nav.month', icon: 'calendar', path: '/month' },
   { key: 'account', label: 'nav.account', icon: 'user', path: '/account' }
@@ -13,6 +14,7 @@ const NAV = [
 /** Menu trái của web (lvl: cấp tối thiểu để hiện) */
 const SIDE = [
   { key: 'home', label: 'nav.home', icon: 'home', path: '/', lvl: 1 },
+  { key: 'today', label: 'tile.today', icon: 'checklist', path: '/today', lvl: 1 },
   { key: 'month', label: 'nav.month', icon: 'calendar', path: '/month', lvl: 1 },
   { key: 'pending', label: 'nav.pending', icon: 'alert', path: '/pending', lvl: 3 },
   { key: 'machines', label: 'nav.machines', icon: 'equipment', path: '/machines', lvl: 1 },
@@ -50,7 +52,7 @@ export function mountShell(root, { env, onScan }) {
       <div class="strip warn" id="st-session" hidden></div>
       <main class="view" id="view"></main>
     </div>
-    <nav class="bnav bnav4" aria-label="${esc(biText('menu.title'))}">
+    <nav class="bnav" aria-label="${esc(biText('menu.title'))}">
       ${NAV.map((n) => {
         if (n.key === 'scan') return `<button type="button" class="bnav-item bnav-scan" id="bnav-scan"><span class="bnav-scan-box">${ICON.scan}</span><span class="bnav-label">${bi(n.label)}</span></button>`;
         return `<button type="button" class="bnav-item" data-nav="${n.key}" data-path="${n.path}">${ICON[n.icon]}<span class="bnav-label">${bi(n.label)}</span></button>`;

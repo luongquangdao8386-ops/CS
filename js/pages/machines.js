@@ -7,7 +7,7 @@ import { recs, byId, mapOf, roleLevel, boot, dueList, inMyAreas, templateItems }
 import { writeOnline, writeFail, showErrors, busy } from '../form.js';
 import { app, afterCommit } from '../app.js';
 import { overrideEditorHtml, wireOverrides, readOverride } from '../std-edit.js';
-import { stateBadge, freqText } from './home.js';
+import { stateBadge, freqText } from './today.js';
 import { periodLabel } from './check.js';
 
 const filt = { q: '', area: '', only: 'assigned' };

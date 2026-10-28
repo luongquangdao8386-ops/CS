@@ -2,7 +2,7 @@
 // (cs-shell-* ở /CS/, cs_thu-shell-* ở /CS-thu/ — cùng quy tắc storageNs trong js/core.js). Chung origin github.io với M&E:
 // tiền tố "cs" không đụng cache "me-*" của M&E.
 const VERSION = '1.0.0-d1.1';
-const BUILD_HASH = 'cbed4a8d7069'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
+const BUILD_HASH = 'eb116e91cd11'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
 const NS = (() => {
   const m = /^\/([^/]+)\//.exec(self.location.pathname);
   const seg = m ? m[1].toLowerCase().replace(/[^a-z0-9]+/g, '_') : '';
@@ -14,7 +14,7 @@ const FILES = [
   './', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
   'js/main.js', 'js/core.js', 'js/dict.js', 'js/auth.js', 'js/sync.js', 'js/ui.js', 'js/scan.js', 'js/media.js', 'js/qr-worker.js',
   'js/router.js', 'js/std-edit.js', 'js/data.js', 'js/judge.js', 'js/shell.js', 'js/app.js', 'js/form.js', 'js/xlsx.js', 'js/report-logo.js',
-  'js/pages/home.js', 'js/pages/check.js', 'js/pages/month.js', 'js/pages/pending.js', 'js/pages/machines.js', 'js/pages/templates.js',
+  'js/pages/home.js', 'js/pages/today.js', 'js/pages/check.js', 'js/pages/month.js', 'js/pages/pending.js', 'js/pages/machines.js', 'js/pages/templates.js',
   'js/pages/reports.js', 'js/pages/account.js', 'js/pages/drafts.js', 'js/pages/admin.js',
   'vendor/jsQR-1.4.0.js',
   'assets/brand/cs-tile.svg', 'assets/bg/factory.jpg', 'assets/bg/home.jpg', 'assets/icons/apple-touch-icon.png', 'assets/icons/icon-192.png', 'assets/icons/icon-512.png'

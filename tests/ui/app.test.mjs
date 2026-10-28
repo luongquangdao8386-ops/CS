@@ -17,11 +17,15 @@ function seeded() {
   env.g.seedSample_('SYSTEM');
   return env;
 }
-async function login(page, code = OWNER_CODE, pin = OWNER_PIN) {
+/** Đăng nhập → trang chủ (lưới ô như M&E); mặc định đi tiếp sang Kiểm tra hôm nay */
+async function login(page, code = OWNER_CODE, pin = OWNER_PIN, { stay = false } = {}) {
   await page.waitForSelector('#emp', { timeout: 15000 });
   await page.fill('#emp', code);
   await page.fill('#pin', pin);
   await page.click('#login-btn');
+  await page.waitForSelector('.grid9', { timeout: 20000 });
+  if (stay) return;
+  await page.evaluate(() => { location.hash = '#/today'; });
   await page.waitForSelector('.due-item, .empty-state', { timeout: 20000 });
 }
 const go = (page, h) => page.evaluate((x) => { location.hash = x; }, h);
@@ -42,18 +46,25 @@ async function fillCheck(page, values) {
   for (let i = 0; i < await groups.count(); i++) await groups.nth(i).locator('.opt').first().click();
 }
 
-test('iPhone: Hôm nay theo ca, 4 nút nav, biểu tượng app chỉ ở trang chủ; màn kiểm tô màu khi gõ, Không đạt bắt buộc ghi chú, lưu lên máy chủ', async () => {
+test('iPhone: trang chủ như M&E (lưới ô, lịch tuần), 5 nút nav; Kiểm tra hôm nay theo ca; màn kiểm tô màu khi gõ, Không đạt bắt buộc ghi chú, lưu lên máy chủ', async () => {
   const env = seeded();
   const app = await openApp({ env, now: NOW, ...IPHONE });
   try {
     const { page } = app;
-    await login(page);
-    assert.equal(await page.locator('.bnav > *').count(), 4);
+    await login(page, OWNER_CODE, OWNER_PIN, { stay: true });
+    assert.equal(await page.locator('.bnav > *').count(), 5);
+    assert.equal(await page.locator('.home-hero img.brand-logo[src*="cs-tile.svg"]').count(), 1);
+    assert.equal(await page.locator('.grid9 > .tile').count(), 9, 'Quản trị: đủ 9 ô');
+    assert.ok((await page.textContent('.grid9')).includes('5 phiếu chưa kiểm'));
+    assert.equal(await page.locator('.home-week .day').count(), 7);
+    assert.ok(await noOverflow(page));
+    await page.screenshot({ path: path.join(SHOTS, 'home-iphone.png'), fullPage: true });
+    await page.click('.grid9 a.tile[href="#/today"]');
+    await page.waitForSelector('.due-item');
     assert.ok((await page.textContent('.shift-card')).includes('Ca 1'));
     assert.equal(await page.locator('.due-item').count(), 5, '5 phiếu kỳ này (2 máy nén theo ca, 2 máy theo ngày, 1 tủ điện theo tuần)');
-    assert.equal(await page.locator('.cs-hero img[src*="cs-tile.svg"]').count(), 1);
     assert.ok(await noOverflow(page));
-    await page.screenshot({ path: path.join(SHOTS, 'home-iphone.png') });
+    await page.screenshot({ path: path.join(SHOTS, 'today-iphone.png') });
     // Mở phiếu máy nén khí 01
     await page.locator('.due-item', { hasText: 'TB-0007' }).click();
     await page.waitForSelector('.ci');
@@ -140,13 +151,17 @@ test('web: menu trái, Chờ xử lý — xử lý Không đạt, xác nhận ng
   try {
     const { page } = app;
     await login(page);
-    assert.equal(await page.locator('.side-nav .side-item').count(), 7);
+    assert.equal(await page.locator('.side-nav .side-item').count(), 8);
     await page.locator('.due-item', { hasText: 'TB-0007' }).click();
     await fillCheck(page, ['52', '97', '5,4', '0,32', '41', '42', '46', '385', '2,1']);
     const notes = page.locator('.ci.st-fail .ci-note textarea');
     for (let i = 0; i < await notes.count(); i++) await notes.nth(i).fill('Ghi chú ' + i);
     await page.click('#ck-save');
     await page.waitForFunction(() => document.querySelectorAll('.due-item').length === 4 && !document.querySelector('.due-item.st-local'), null, { timeout: 15000 });
+    await page.screenshot({ path: path.join(SHOTS, 'today-web.png') });
+    await go(page, '#/');
+    await page.waitForSelector('.home-today tbody tr');
+    assert.ok((await page.textContent('.home-week .day.today')).includes('✕ 1'), 'lịch tuần: hôm nay 1 phiếu Không đạt');
     await page.screenshot({ path: path.join(SHOTS, 'home-web.png') });
     // Bảng tháng web: bảng hạng mục × ngày có giá trị, biểu đồ xu hướng
     await go(page, '#/month');
@@ -176,7 +191,7 @@ test('web: menu trái, Chờ xử lý — xử lý Không đạt, xác nhận ng
     env.g.dbReset_();
     assert.equal(env.rows('DayConfirms').length, 1);
     // Lượt kiểm của ngày đã xác nhận: chỉ xem
-    await go(page, '#/');
+    await go(page, '#/today');
     await page.waitForSelector('.due-item');
     await page.click('[data-f="fail"]');
     await page.waitForSelector('.due-item.st-fail');
@@ -237,7 +252,7 @@ test('Mẫu checksheet: tạo mẫu mới từ thư viện, gán cho máy; máy 
     await page.waitForFunction(() => document.querySelector('.chip') && document.body.innerText.includes('TB-0031'), null, { timeout: 15000 });
     env.g.dbReset_();
     assert.ok(env.rows('Assignments').some((a) => a.template_id === tpl.template_id && a.active));
-    await go(page, '#/');
+    await go(page, '#/today');
     await page.waitForFunction(() => document.querySelectorAll('.due-item').length === 6, null, { timeout: 10000 });
     // Báo cáo: xem trước có tiêu đề phiếu, PDF qua máy chủ
     await go(page, '#/reports');

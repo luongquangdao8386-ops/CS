@@ -158,7 +158,8 @@ export async function openResolved(r) {
 function registerRoutes() {
   const lazy = (mod, fn) => async (view, ctx) => { const m = await import(mod); return m[fn](view, ctx); };
   route('/', lazy('./pages/home.js', 'renderHome'), { nav: 'home' });
-  route('/check/:assignment', lazy('./pages/check.js', 'renderCheck'), { nav: 'home' });
+  route('/today', lazy('./pages/today.js', 'renderToday'), { nav: 'today' });
+  route('/check/:assignment', lazy('./pages/check.js', 'renderCheck'), { nav: 'today' });
   route('/m/:machine', lazy('./pages/machines.js', 'renderMachine'), { nav: 'machines' });
   route('/month', lazy('./pages/month.js', 'renderMonth'), { nav: 'month' });
   route('/pending', lazy('./pages/pending.js', 'renderPending'), { nav: 'pending' });
@@ -230,7 +231,7 @@ window.addEventListener('resize', () => {
 
 // Màn xem (Hôm nay, Bảng tháng, Chờ xử lý, máy) vẽ lại sau khi tự gửi nháp xong.
 // Không vẽ lại màn nhập (kiểm tra, sửa mẫu), khi đang mở hộp thoại hoặc đang gõ.
-const VIEW_PAGE = /^\/(month|pending|machines|m\/[^/]+|account(\/drafts)?)?$/;
+const VIEW_PAGE = /^\/(today|month|pending|machines|m\/[^/]+|account(\/drafts)?)?$/;
 export function refreshAfterSend(r) {
   if (!app.shell) return;
   const path = currentPath();
@@ -263,7 +264,7 @@ window.addEventListener('focus', syncOnReturn);
 // Trang Hôm nay đổi theo ca: mỗi phút vẽ lại nếu sang ca mới (không khi đang gõ)
 let lastShiftKey = '';
 setInterval(async () => {
-  if (!app.shell || currentPath() !== '/') return;
+  if (!app.shell || !['/', '/today'].includes(currentPath())) return;
   const { currentShift } = await import('./data.js');
   const s = currentShift();
   const k = s.work_date + '#' + s.shift;

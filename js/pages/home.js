@@ -1,124 +1,106 @@
-// Hôm nay: ca đang chạy, vòng tiến độ, nút quét, danh sách máy phải kiểm kỳ này theo khu vực, việc chờ Trưởng bộ phận
-import { bi, biText, esc, session, badge, fmtDate, nameText } from '../core.js';
-import { ICON } from '../ui.js';
+// Trang chủ (cùng khuôn với trang chủ M&E): biểu tượng app + Checksheet trên nền nhà máy, ô Chờ bạn xử lý, lịch tuần,
+// lưới ô chức năng có số đếm; web thêm bảng Phiếu kỳ này
+import { bi, biText, esc, fmtDate, session, nameText } from '../core.js';
+import { brandHtml, ICON } from '../ui.js';
 import { isWide } from '../shell.js';
-import { dueList, roleLevel, today, weekday, currentShift, nowMs, shifts, openAbnormals, missedPeriods, unconfirmedDays, users, userName } from '../data.js';
-import { periodSpan } from '../judge.js';
+import { recs, dueList, roleLevel, today, weekday, openAbnormals, missedPeriods, unconfirmedDays, users, userName, weekSummary } from '../data.js';
+import { queueItems } from '../sync.js';
+import { addDaysIso } from '../judge.js';
 import { scanAndOpen } from '../app.js';
+import { navigate } from '../router.js';
+import { stateBadge } from './today.js';
+import { periodLabel } from './check.js';
 
-let filter = 'todo';
+const TODO = ['TODO', 'PARTIAL', 'LOCAL'];
 
-/** Nhãn trạng thái một phiếu kỳ này */
-export function stateBadge(st) {
-  if (st.key === 'PARTIAL') return badge('state.PARTIAL', { N: st.filled, M: st.total });
-  if (st.key === 'FAIL' || st.key === 'WARN') return badge('state.' + st.key, { N: st.n });
-  return badge('state.' + st.key);
+/** Ô "Chờ bạn xử lý" (Trưởng bộ phận, Quản trị) */
+async function pendingHtml() {
+  if (roleLevel() < 3) return '';
+  const [abn, missed, days] = [(await openAbnormals()).length, (await missedPeriods()).length, (await unconfirmedDays()).length];
+  if (!abn && !missed && !days) return '';
+  return `<a class="card pend-card" href="#/pending">
+    <div class="pend-title">${ICON.alert}<strong>${bi('home.pending_me')}</strong>${ICON.chevron}</div>
+    <div class="pend-rows">${abn ? `<span class="t-red-text">${bi('pend.n_abn', { N: abn })}</span>` : ''}${missed ? `<span>${bi('pend.n_missed', { N: missed })}</span>` : ''}${days ? `<span>${bi('pend.n_days', { N: days })}</span>` : ''}</div></a>`;
 }
 
-/** "Mỗi ca · 10 mục" */
-export function freqText(tpl, items) {
-  return `${bi('freq_each.' + tpl.frequency)}${items ? ` · ${bi('home.items_n', { N: items })}` : ''}`;
+/** Lịch tuần: mỗi ngày số phiếu Đạt / Cần chú ý / Không đạt / bỏ sót; ngày tới: số phiếu phải kiểm */
+async function weekHtml() {
+  const t = today();
+  const from = addDaysIso(t, 1 - weekday(t));
+  const to = addDaysIso(from, 6);
+  const sum = await weekSummary(from, 7);
+  const chip = (cls, n, key) => (n ? `<span class="day-item wk-${cls}" title="${esc(biText(key))}">${cls === 'ok' ? '✓' : cls === 'warn' ? '!' : cls === 'fail' ? '✕' : cls === 'missed' ? '–' : ''} ${n}</span>` : '');
+  return `<section class="card home-week">
+    <div class="card-head"><h2>${bi('home.week')}</h2><span class="muted">${esc(fmtDate(from))} – ${esc(fmtDate(to))}</span>
+      <a class="btn tiny" href="#/month">${ICON.calendar}<span>${bi('nav.month')}</span></a></div>
+    <div class="week">${sum.map((x) => {
+      const items = x.date > t
+        ? (x.due ? `<span class="day-item wk-plan" title="${esc(biText('home.wk_plan'))}">${x.due} ${bi('home.ring_unit')}</span>` : '')
+        : chip('ok', x.ok, 'res.OK') + chip('warn', x.warn + x.partial, 'res.WARN') + chip('fail', x.fail, 'res.FAIL') + chip('missed', x.missed, 'state.MISSED')
+          + (x.date === t && x.pending ? `<span class="day-item wk-plan">${bi('home.wk_left', { N: x.pending })}</span>` : '');
+      const tag = x.date === t ? 'a' : 'div';
+      return `<${tag} class="day${x.date === t ? ' today' : ''}"${x.date === t ? ' href="#/today"' : ''}><div class="day-head"><span>${bi('wd_short.' + weekday(x.date))}</span><span class="day-num">${esc(x.date.slice(8, 10))}/${esc(x.date.slice(5, 7))}</span></div>
+        <div class="day-items">${items}</div></${tag}>`;
+    }).join('')}</div>
+    <div class="cal-legend small"><span>✓ ${bi('state_short.DONE')}</span><span>! ${bi('state_short.WARN')}</span><span>✕ ${bi('state_short.FAIL')}</span><span>– ${bi('state.MISSED')}</span></div></section>`;
 }
 
-function lastText(last, um) {
-  if (!last) return '';
-  const res = last.fail_count ? 'state_short.FAIL' : last.warn_count ? 'state_short.WARN' : 'state_short.DONE';
-  const when = last.work_date === today() ? biText('home.today') : fmtDate(last.work_date);
-  return ` · ${bi('home.last')}: ${esc(when)}${last.shift ? ' ' + bi('shift.n', { N: last.shift }) : ''}, ${bi(res)}${um ? ` (${esc(userName(um, last.checked_by))})` : ''}`;
+/** Lưới ô chức năng (3 cột như M&E); Trưởng bộ phận, Quản trị đủ 9 ô */
+async function gridHtml(due) {
+  const lvl = roleLevel();
+  const uid = session.user && session.user.user_id;
+  const left = due.filter((d) => d.period && TODO.includes(d.state.key)).length;
+  const fail = due.filter((d) => d.period && d.state.key === 'FAIL').length;
+  const macs = (await recs('MACHINE')).filter((m) => m.active).length;
+  const tpls = (await recs('TEMPLATE')).filter((t) => t.active).length;
+  const lib = (await recs('LIBRARY_ITEM')).filter((x) => x.active !== false).length;
+  const q = (await queueItems().catch(() => [])).filter((o) => o.user_id === uid && o.dataset_epoch === session.epoch).length;
+  const pend = lvl >= 3 ? (await openAbnormals()).length + (await missedPeriods()).length + (await unconfirmedDays()).length : 0;
+  const tiles = [
+    { key: 'today', icon: 'checklist', href: '/today', tail: left ? bi('home.left_n', { N: left }) : (due.length ? bi('home.all_done_short') : ''), red: fail ? bi('home.fail_n', { N: fail }) : '' },
+    { key: 'scan', icon: 'scan', scan: true, tail: bi('home.scan_tail') },
+    { key: 'month', icon: 'calendar', href: '/month' },
+    { key: 'pending', icon: 'alert', href: '/pending', lvl: 3, red: pend ? bi('pend.count', { N: pend }) : '', tail: pend ? '' : bi('home.none_pending') },
+    { key: 'machines', icon: 'equipment', href: '/machines', tail: macs ? bi('mac.count', { N: macs }) : '' },
+    { key: 'templates', icon: 'work', href: '/templates', lvl: 3, tail: tpls ? bi('tpl.count', { N: tpls }) : '' },
+    { key: 'library', icon: 'library', href: '/templates/library', lvl: 3, tail: lib ? bi('home.items_n', { N: lib }) : '' },
+    { key: 'reports', icon: 'reports', href: '/reports' },
+    { key: 'drafts', icon: 'sync', href: '/account/drafts', tail: q ? bi('sync.queued_count', { N: q }) : bi('home.none_drafts') }
+  ].filter((x) => !x.lvl || lvl >= x.lvl);
+  return `<section class="grid9" aria-label="${esc(biText('menu.title'))}">${tiles.map((x) => {
+    const inner = `${ICON[x.icon]}<span class="tile-label">${bi('tile.' + x.key)}</span>${x.red ? `<span class="tile-count t-red-text">${x.red}</span>` : ''}${x.tail ? `<span class="tile-count">${x.tail}</span>` : ''}`;
+    return x.scan ? `<button type="button" class="tile tile-scan" id="h-scan">${inner}</button>` : `<a class="tile" href="#${x.href}">${inner}</a>`;
+  }).join('')}</section>`;
 }
 
-function ring(done, total) {
-  const r = 38, c = 2 * Math.PI * r;
-  const k = total ? done / total : 0;
-  return `<svg class="ring" width="92" height="92" viewBox="0 0 92 92" role="img" aria-label="${esc(biText('home.ring_aria', { N: done, M: total }))}">
-    <circle cx="46" cy="46" r="${r}" fill="none" stroke="#E2E6EB" stroke-width="10"/>
-    ${done ? `<circle cx="46" cy="46" r="${r}" fill="none" stroke="#17324F" stroke-width="10" stroke-linecap="round" stroke-dasharray="${(c * k).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 46 46)"/>` : ''}
-  </svg>`;
-}
-
-function leftText(ms) {
-  if (ms <= 0) return '';
-  const m = Math.round(ms / 60000);
-  return biText('home.left', { H: Math.floor(m / 60), M: m % 60 });
+/** Bảng Phiếu kỳ này (web): máy phải kiểm kỳ đang chạy, chưa kiểm và Không đạt lên trước */
+async function todayTableHtml(due) {
+  const um = await users();
+  const rank = { FAIL: 0, TODO: 1, PARTIAL: 2, LOCAL: 3, WARN: 4, DONE: 5 };
+  const rows = due.filter((d) => d.period).sort((a, b) => (rank[a.state.key] - rank[b.state.key]) || String(a.mac.machine_code).localeCompare(String(b.mac.machine_code)));
+  return `<section class="card home-today"><div class="card-head"><h2>${bi('home.today_table')}</h2><a class="btn tiny" href="#/today">${ICON.checklist}<span>${bi('tile.today')}</span></a></div>
+    ${rows.length ? `<div class="table-wrap"><table class="tbl clickable"><thead><tr>
+      <th>${bi('mac.code')}</th><th>${bi('mac.name')}</th><th>${bi('rpt.area')}</th><th>${bi('check.template')}</th><th>${bi('home.col_period')}</th><th>${bi('col.status')}</th><th>${bi('rpt.row_checker')}</th></tr></thead>
+      <tbody>${rows.map((d) => `<tr data-href="/check/${encodeURIComponent(d.asg.assignment_id)}"><td class="code">${esc(d.mac.machine_code)}</td><td>${esc(nameText(d.mac))}</td>
+        <td>${esc(nameText(d.area))}</td><td>${esc(nameText(d.tpl))}</td><td>${periodLabel(d.tpl.frequency, d.period.work_date, d.period.shift)}</td>
+        <td>${stateBadge(d.state)}</td><td>${d.run ? esc(userName(um, d.run.checked_by)) : ''}</td></tr>`).join('')}</tbody></table></div>`
+      : `<p class="muted">${bi('home.no_assign')}</p>`}</section>`;
 }
 
 export async function renderHome(view, { shell }) {
   shell.setScreen({ title: 'nav.home', home: true });
+  const wide = isWide();
   const u = session.user || {};
-  const lvl = roleLevel();
-  const list = await dueList();
-  const um = await users();
-  const due = list.filter((d) => d.period);
-  const off = list.filter((d) => !d.period);
-  const n = {
-    done: due.filter((d) => !['TODO', 'PARTIAL', 'LOCAL'].includes(d.state.key)).length,
-    todo: due.filter((d) => ['TODO', 'PARTIAL', 'LOCAL'].includes(d.state.key)).length,
-    fail: due.filter((d) => d.state.key === 'FAIL').length,
-    warn: due.filter((d) => d.state.key === 'WARN').length
-  };
-  const cs = currentShift();
-  const sh = shifts();
-  const span = cs.def ? periodSpan('SHIFT', { date: cs.work_date }, cs.shift, sh) : null;
   const t = today();
-  // Việc chờ Trưởng bộ phận
-  let pend = null;
-  if (lvl >= 3) pend = { abn: (await openAbnormals()).length, missed: (await missedPeriods()).length, days: (await unconfirmedDays()).length };
-  const pick = {
-    todo: (d) => ['TODO', 'PARTIAL', 'LOCAL'].includes(d.state.key),
-    fail: (d) => d.state.key === 'FAIL',
-    done: (d) => !['TODO', 'PARTIAL', 'LOCAL'].includes(d.state.key),
-    all: () => true
-  };
-  if (!pick[filter]) filter = 'todo';
-  const shown = (filter === 'all' ? list : due).filter(pick[filter]);
-  // Nhóm theo khu vực
-  const groups = new Map();
-  for (const d of shown) {
-    const k = d.area ? d.area.area_id : '';
-    if (!groups.has(k)) groups.set(k, { area: d.area, items: [] });
-    groups.get(k).items.push(d);
-  }
-  const gList = [...groups.values()].sort((a, b) => String(a.area ? a.area.area_code || a.area.name_vi : '~').localeCompare(String(b.area ? b.area.area_code || b.area.name_vi : '~')));
-  const item = (d) => {
-    const href = d.period ? '#/check/' + encodeURIComponent(d.asg.assignment_id) : '#/m/' + encodeURIComponent(d.mac.machine_id);
-    const sub = d.state.key === 'LOCAL' ? ` · ${bi('home.local_wait')}` : (d.run ? ` · ${esc(userName(um, d.run.checked_by))}` : lastText(d.last, null));
-    return `<a class="due-item st-${d.state.key.toLowerCase()}${d.period ? '' : ' dim'}" href="${href}">
-      <div class="due-main"><div class="due-top"><span class="code">${esc(d.mac.machine_code)}</span>${d.period ? stateBadge(d.state) : badge('state.OFF_SHIFT')}</div>
-      <div class="due-name">${esc(nameText(d.mac))}</div>
-      <div class="muted small">${esc(nameText(d.tpl))} · ${freqText(d.tpl, d.items)}${sub}</div></div>${ICON.chevron}</a>`;
-  };
-  const chips = [['todo', 'home.f_todo', n.todo], ['fail', 'home.f_fail', n.fail], ['done', 'home.f_done', n.done], ['all', 'home.f_all', list.length]];
-  const hero = `<div class="cs-hero">
-      <div class="cs-hero-brand"><img src="assets/brand/cs-tile.svg" alt="" width="46" height="46">
-        <div class="cs-glow"><div class="cs-hero-name">Checksheet</div><div class="cs-hero-sub">${bi('brand.sub')}</div></div></div>
-      <div class="cs-glow cs-hero-who">${esc(u.display_name || '')} · ${bi('level.' + lvl)}<br>${bi('weekday.' + weekday(t))} ${esc(fmtDate(t))}</div>
-    </div>`;
-  const shiftCard = `<section class="card shift-card">
-      <div class="shift-head"><h2>${cs.def ? `${bi('shift.name' + cs.shift)} <span class="muted">${esc(cs.def.start)} – ${esc(cs.def.end)}</span>` : bi('home.no_shift')}</h2>
-        ${span ? `<span class="muted small">${esc(leftText(span.end - nowMs()))}</span>` : ''}</div>
-      <div class="shift-body"><div class="ring-box">${ring(n.done, due.length)}<div class="ring-num"><strong>${n.done}/${due.length}</strong><span>${bi('home.ring_unit')}</span></div></div>
-        <div class="kcounts">
-          <div class="kc"><strong>${n.done}</strong><span>${bi('home.c_done')}</span></div>
-          <div class="kc"><strong>${n.todo}</strong><span>${bi('home.c_todo')}</span></div>
-          <div class="kc red"><strong>${n.fail}</strong><span>${bi('home.c_fail')}</span></div>
-          <div class="kc amber"><strong>${n.warn}</strong><span>${bi('home.c_warn')}</span></div>
-        </div></div>
-    </section>`;
-  const pendCard = pend && (pend.abn || pend.missed || pend.days) ? `<a class="card pend-card" href="#/pending">
-      <div class="pend-title">${ICON.alert}<strong>${bi('home.pending_me')}</strong>${ICON.chevron}</div>
-      <div class="pend-rows">${pend.abn ? `<span class="t-red-text">${bi('pend.n_abn', { N: pend.abn })}</span>` : ''}${pend.missed ? `<span>${bi('pend.n_missed', { N: pend.missed })}</span>` : ''}${pend.days ? `<span>${bi('pend.n_days', { N: pend.days })}</span>` : ''}</div></a>` : '';
-  const listHtml = `<div class="chips" role="tablist">${chips.map(([k, l, c]) => `<button type="button" class="chip${filter === k ? ' on' : ''}" data-f="${k}">${bi(l)} <b>${c}</b></button>`).join('')}</div>
-    ${gList.map((g) => {
-      const left = g.items.filter((d) => d.period && ['TODO', 'PARTIAL', 'LOCAL'].includes(d.state.key)).length;
-      return `<div class="area-head"><h3>${g.area ? esc(nameText(g.area)) : bi('home.no_area')}</h3>${left ? `<span class="muted small">${bi('home.left_n', { N: left })}</span>` : ''}</div>
-        <div class="due-list">${g.items.map(item).join('')}</div>`;
-    }).join('') || `<div class="card empty-state"><p class="muted">${bi(list.length ? (filter === 'todo' ? 'home.all_done' : 'home.none_filter') : (lvl >= 3 ? 'home.no_assign_c3' : 'home.no_assign'))}</p>
-      ${!list.length && lvl >= 3 ? `<a class="btn small primary" href="#/machines">${bi('nav.machines')}</a>` : ''}</div>`}
-    ${off.length && filter !== 'all' ? `<p class="muted small">${bi('home.off_shift_n', { N: off.length })}</p>` : ''}`;
-  const scanBtn = `<button type="button" class="scan-big" id="h-scan">${ICON.scan}<span>${bi('home.scan')}</span></button>`;
-  view.innerHTML = isWide()
-    ? `<div class="home-web"><div class="home-web-main">${listHtml}</div><aside class="home-web-side">${shiftCard}${scanBtn}${pendCard}</aside></div>`
-    : `${hero}<div class="home-body">${shiftCard}${scanBtn}${pendCard}${listHtml}</div>`;
-  view.querySelector('#h-scan').addEventListener('click', () => scanAndOpen());
-  view.querySelectorAll('[data-f]').forEach((b) => b.addEventListener('click', () => { filter = b.dataset.f; renderHome(view, { shell }); }));
+  const due = await dueList();
+  view.innerHTML = `<div class="home">
+    <div class="home-hero">${brandHtml()}<div class="home-who">${esc(u.display_name || '')} · ${bi('level.' + roleLevel())}<br>${bi('weekday.' + weekday(t))} ${esc(fmtDate(t))}</div></div>
+    <div class="home-body${wide ? ' wide' : ''}">
+      <div class="home-left">${await pendingHtml()}${await weekHtml()}</div>
+      <div class="home-right">${await gridHtml(due)}</div>
+      ${wide ? `<div class="home-bottom">${await todayTableHtml(due)}</div>` : ''}
+    </div></div>`;
+  const sb = view.querySelector('#h-scan');
+  if (sb) sb.addEventListener('click', () => scanAndOpen());
+  view.querySelectorAll('tr[data-href]').forEach((tr) => tr.addEventListener('click', () => navigate(tr.dataset.href)));
 }
