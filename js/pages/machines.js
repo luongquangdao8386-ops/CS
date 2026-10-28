@@ -10,7 +10,8 @@ import { overrideEditorHtml, wireOverrides, readOverride } from '../std-edit.js'
 import { stateBadge, freqText } from './today.js';
 import { periodLabel } from './check.js';
 
-const filt = { q: '', area: '', only: 'assigned' };
+// Mặc định hiện mọi máy đang dùng (máy chưa gán mẫu cũng thấy, để gán mẫu)
+const filt = { q: '', area: '', only: 'all' };
 
 async function meSyncInfo() {
   const b = await boot();
@@ -47,7 +48,7 @@ export async function renderMachines(view, { shell }) {
     if (filt.only === 'assigned' && !nAsg.has(m.machine_id)) return false;
     if (filt.only === 'unassigned' && (nAsg.has(m.machine_id) || !m.active)) return false;
     if (filt.only === 'inactive' && m.active) return false;
-    if (filt.only !== 'inactive' && !m.active && filt.only !== 'all') return false;
+    if (filt.only !== 'inactive' && !m.active) return false;
     if (q && !(m.machine_code + ' ' + nameText(m) + ' ' + (m.model || '') + ' ' + (m.category_vi || '')).toLowerCase().includes(q)) return false;
     return true;
   }).sort((a, b) => String(a.machine_code).localeCompare(String(b.machine_code)));
@@ -67,7 +68,7 @@ export async function renderMachines(view, { shell }) {
       <div class="search"><input class="inp" id="mc-q" type="search" placeholder="${esc(biText('mac.search'))}" value="${esc(filt.q)}" autocomplete="off"></div>
       <div class="row">
         <select class="inp sel" id="mc-area"><option value="">${esc(biText('mac.all_areas'))}</option>${usedAreas.map((a) => `<option value="${esc(a.area_id)}"${a.area_id === filt.area ? ' selected' : ''}>${esc(nameText(a))}</option>`).join('')}</select>
-        <select class="inp sel" id="mc-only">${['assigned', 'unassigned', 'all', 'inactive'].map((k) => `<option value="${k}"${filt.only === k ? ' selected' : ''}>${esc(biText('mac.only_' + k))}</option>`).join('')}</select>
+        <select class="inp sel" id="mc-only">${['all', 'assigned', 'unassigned', 'inactive'].map((k) => `<option value="${k}"${filt.only === k ? ' selected' : ''}>${esc(biText('mac.only_' + k))}</option>`).join('')}</select>
         ${c3 ? `<button type="button" class="btn small" id="mc-sync"${online ? '' : ' disabled'}>${ICON.sync}<span>${bi('mac.sync_me')}</span></button>` : ''}
       </div>
       <p class="muted small">${await meSyncInfo()} · ${bi('mac.me_hint')}</p>

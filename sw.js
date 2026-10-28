@@ -2,7 +2,7 @@
 // (cs-shell-* ở /CS/, cs_thu-shell-* ở /CS-thu/ — cùng quy tắc storageNs trong js/core.js). Chung origin github.io với M&E:
 // tiền tố "cs" không đụng cache "me-*" của M&E.
 const VERSION = '1.0.0-d1.1';
-const BUILD_HASH = '6a01064d0889'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
+const BUILD_HASH = '734688baf7c7'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
 const NS = (() => {
   const m = /^\/([^/]+)\//.exec(self.location.pathname);
   const seg = m ? m[1].toLowerCase().replace(/[^a-z0-9]+/g, '_') : '';
