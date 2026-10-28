@@ -253,8 +253,19 @@ export async function renderMeLink(view, { shell }) {
       return;
     }
     if (res.code === 'VALIDATION_ERROR') { showErrors(view, res.errors); return; }
+    if (res.code === 'ME_LINK_FAILED') { showMeLinkFail(view, (res.data && res.data.reason) || ''); return; }
     writeFail(res);
   });
+}
+
+/** Lý do không lấy được danh sách từ M&E và việc cần làm */
+function showMeLinkFail(view, reason) {
+  const r = String(reason || '');
+  const key = r === 'FORBIDDEN' ? 'melink.fail_forbidden'
+    : /^NON_JSON|REDIRECTED_AS_GET|NO_RESPONSE/.test(r) ? 'melink.fail_url'
+      : /permission|quyền|UrlFetch/i.test(r) ? 'melink.fail_perm' : 'melink.fail_other';
+  $('.form-err', view).innerHTML = `${bi(key)}<br><span class="muted small">${bi('melink.reason')}: <code>${esc(r || '—')}</code></span>`;
+  toast(bi('melink.fail_title'), 'err');
 }
 
 /* ====================== Sao lưu ====================== */

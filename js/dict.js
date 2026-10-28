@@ -663,4 +663,10 @@ export const DICT = {"rpt.title":["Phiếu kiểm tra thiết bị","设备点�
 "sample.already":["Đã có dữ liệu mẫu","示例数据已存在"],
 "sample.pins":["PIN tạm của tài khoản mẫu (đổi khi đăng nhập lần đầu, chỉ hiện một lần):","示例账户临时PIN（首次登录时修改，仅显示一次）："],
 "ie.collapse":["Thu gọn","收起"],
-"auth.reauth":["Nhập lại PIN để tiếp tục","请重新输入PIN以继续"]};
+"auth.reauth":["Nhập lại PIN để tiếp tục","请重新输入PIN以继续"],
+"melink.fail_title":["Không lấy được danh sách thiết bị từ M&E","无法从M&E获取设备清单"],
+"melink.reason":["Mã lỗi","错误代码"],
+"melink.fail_forbidden":["M&E từ chối. Thường do: (1) mã kết nối sai hoặc thiếu ký tự — chạy lại adminCreateFeedKey bên M&E và chép đủ; hoặc (2) máy chủ M&E chưa chạy bản mới 1.0.0-d4.12 — bên M&E dán Code.gs mới, Lưu, rồi Triển khai → Quản lý các bản triển khai → bút chì → Phiên bản mới → Triển khai.","M&E拒绝。通常原因：(1) 连接码错误或不完整——在M&E重新运行 adminCreateFeedKey 并完整复制；或 (2) M&E服务器尚未运行新版本 1.0.0-d4.12——在M&E粘贴新 Code.gs，保存，然后 部署 → 管理部署 → 编辑 → 新版本 → 部署。"],
+"melink.fail_url":["Link không trả lời đúng: kiểm tra đây là link /exec của máy chủ M&E (Triển khai → Quản lý các bản triển khai → URL ứng dụng web) và web app M&E cho phép Bất kỳ ai truy cập.","链接响应不正确：请确认这是M&E服务器的 /exec 链接（部署 → 管理部署 → 网页应用URL），且M&E网页应用允许任何人访问。"],
+"melink.fail_perm":["Máy chủ Checksheet chưa được cấp quyền kết nối ra ngoài: trong dự án CS_MayChu_THU chọn hàm adminSyncMachinesNow → Chạy → cho phép quyền, rồi thử lại.","点检表服务器尚未获得外部连接权限：在 CS_MayChu_THU 项目中选择 adminSyncMachinesNow → 运行 → 授权，然后重试。"],
+"melink.fail_other":["Lỗi khác — chụp màn hình gửi Claude (che mã kết nối).","其他错误——截图发给Claude（遮住连接码）。"]};
