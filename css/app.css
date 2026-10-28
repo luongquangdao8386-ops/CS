@@ -1144,7 +1144,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .ck-sum { display: flex; gap: 12px; flex-wrap: wrap; font-weight: 700; }
 .ck-left { color: var(--amber); margin-top: 2px; }
 @media (min-width: 900px) {
-  .ck-bar { left: 240px; bottom: 0; padding: 10px 22px 12px; }
+  .ck-bar { left: 236px; bottom: 0; padding: 10px 22px 12px; }
   .ck-bar > * { max-width: 760px; margin-left: auto; margin-right: auto; }
 }
 
