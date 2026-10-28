@@ -3,13 +3,12 @@
 //   /CS/     THẬT — repo CS
 //   /CS-thu/ THỬ  — repo CS-thu (bản sao mã), chỉ dữ liệu mẫu
 // Link /exec để trống: màn đăng nhập cho dán link tạm (lưu trên máy) tới khi điền vào đây.
-// Hiện chưa có máy chủ THẬT: trang /CS/ tạm dùng máy chủ THỬ (app hiện nhãn THỬ). Khi có THẬT thì điền THAT vào /CS/,
-// trang thử chuyển sang /CS-thu/; máy đã đăng nhập THỬ tự xóa dữ liệu cũ khi đổi máy chủ.
+// Từ 28/10/2026 trang /CS/ dùng máy chủ THẬT (trước đó tạm dùng THỬ); máy đã đăng nhập THỬ tự xóa dữ liệu cũ và đăng nhập lại.
 (function () {
-  var THAT = ''; // CS_MayChu_THAT
+  var THAT = 'https://script.google.com/macros/s/AKfycbzeDnoEkrZZmvNa0jN4LdV0HucnzyIM63AksWPvtD7W1FutSO7ELGcjcQE3BIp9OzbJ/exec'; // CS_MayChu_THAT
   var THU = 'https://script.google.com/macros/s/AKfycbyZyurV0sBS4Tqu48P_QoM0e9OuYpeTXh1aP9-U_w5W7Sz5r9ezDlbmDzaHtvhLU2vr/exec'; // CS_MayChu_THU
   var SITES = {
-    '/CS/': { base: 'https://luongquangdao8386-ops.github.io/CS/', exec: THAT || THU },
+    '/CS/': { base: 'https://luongquangdao8386-ops.github.io/CS/', exec: THAT },
     '/CS-thu/': { base: 'https://luongquangdao8386-ops.github.io/CS-thu/', exec: THU }
   };
   var m = /^\/[^/]+\//.exec(location.pathname);

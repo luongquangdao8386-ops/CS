@@ -3,7 +3,7 @@
 App kiểm tra thiết bị hằng ngày (checksheet): Google Sheets + Apps Script (máy chủ) + PWA trên GitHub Pages (iPhone và máy tính).
 Cùng bố cục, màu sắc và lõi đăng nhập/đồng bộ với app M&E. Giao diện luôn song ngữ Việt · 中文. Đăng nhập bằng mã nhân viên + PIN 6 số.
 
-**Trạng thái:** bản `1.0.0-d1.1` — bản đầu, đang chờ dựng máy chủ THỬ.
+**Trạng thái:** bản `1.0.0-d1.1` — THỬ chạy từ 28/10/2026 (nối M&E THỬ); phát hành THẬT 28/10/2026 (`/CS/` → `CS_MayChu_THAT`, nối M&E THẬT 1.0.0-d4.12). Trang thử riêng `/CS-thu/` (repo `CS-thu`).
 
 ## App làm gì
 
