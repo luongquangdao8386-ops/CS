@@ -36,9 +36,9 @@ export function startStatic() {
 /**
  * Mở trình duyệt; mọi POST tới EXEC đi vào máy chủ giả lập `env`.
  * now: giờ cố định (ISO) cho đồng hồ trình duyệt — đặt cùng giờ với máy chủ giả (freshServer({now})).
- * site: 'CS-thu' (mặc định) hoặc 'CS'. offline(): chặn mạng tới máy chủ.
+ * site: 'CS-thu' (mặc định) hoặc 'CS'. offline(): chặn mạng tới máy chủ. delays: {action: ms} giả lập máy chủ chậm.
  */
-export async function openApp({ env = freshServer(), viewport = { width: 390, height: 844 }, mobile = true, site = 'CS-thu', now = null, hash = '' } = {}) {
+export async function openApp({ env = freshServer(), viewport = { width: 390, height: 844 }, mobile = true, site = 'CS-thu', now = null, hash = '', delays = {} } = {}) {
   const { srv, origin } = await startStatic();
   const base = `${origin}/${site}/`;
   const browser = await chromium.launch();
@@ -62,6 +62,8 @@ export async function openApp({ env = freshServer(), viewport = { width: 390, he
       calls.push(parsed.action);
       env.g.dbReset_();
       body = JSON.stringify(env.post(parsed));
+      // Giả lập máy chủ Apps Script chậm cho một action (ms)
+      if (delays[parsed.action]) await new Promise((r) => setTimeout(r, delays[parsed.action]));
     }
     await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body }).catch(() => {});
   });

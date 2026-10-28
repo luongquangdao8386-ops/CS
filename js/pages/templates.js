@@ -231,7 +231,11 @@ async function assignDialog(tpl, asg) {
     onOpen: (w) => { const q = $('#as-q', w); q.addEventListener('input', () => { const t = q.value.trim().toLowerCase(); $$('[data-q]', w).forEach((l) => { l.hidden = !!t && !l.dataset.q.includes(t); }); }); }
   });
   if (!ids || !ids.length) return false;
+  const btn = document.getElementById('tp-assign');
+  if (btn) { btn.disabled = true; btn.classList.add('busy'); }
+  toast(`<span class="spinner tiny"></span> ${bi('tpl.assigning', { N: ids.length })}`);
   const res = await writeOnline('assignment.add', { template_id: tpl.template_id, machine_ids: ids });
+  if (btn) { btn.disabled = false; btn.classList.remove('busy'); }
   if (res.ok) { toast(bi('tpl.assigned_n', { N: (res.data.added || 0) + (res.data.reactivated || 0) }), 'ok'); await afterCommit(); return true; }
   writeFail(res);
   return false;

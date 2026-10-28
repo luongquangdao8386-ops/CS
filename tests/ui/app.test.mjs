@@ -280,3 +280,26 @@ test('Mẫu checksheet: tạo mẫu mới từ thư viện, gán cho máy; máy 
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });
+
+test('Gán mẫu cho máy: thẻ "Đang lưu…" hiện ngay khi máy chủ còn đang ghi, xong thì thành thẻ thật', async () => {
+  const env = seeded();
+  const app = await openApp({ env, now: NOW, ...IPHONE, delays: { 'assignment.edit': 2500 } });
+  try {
+    const { page } = app;
+    await login(page);
+    env.g.dbReset_();
+    const mac = env.rows('Machines').find((m) => m.machine_code === 'TB-0102');
+    await go(page, '#/m/' + mac.machine_id);
+    await page.waitForSelector('#mc-assign');
+    await page.click('#mc-assign');
+    await page.waitForSelector('#as-t');
+    await page.click('.modal .btn.primary');
+    await page.waitForSelector('.asg-card.saving', { timeout: 500 });
+    assert.ok((await page.textContent('.asg-card.saving')).includes('Đang lưu'));
+    assert.match(await page.getAttribute('#mc-assign', 'class'), /busy/);
+    await page.waitForFunction(() => document.querySelectorAll('.asg-card').length === 2 && !document.querySelector('.asg-card.saving'), null, { timeout: 15000 });
+    env.g.dbReset_();
+    assert.equal(env.rows('Assignments').filter((a) => a.machine_id === mac.machine_id && a.active).length, 2);
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});

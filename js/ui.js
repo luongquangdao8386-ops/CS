@@ -213,8 +213,9 @@ export function dialog({ title, body = '', actions = [], onOpen = null, keepOpen
         const v = a.value !== undefined ? a.value : (a.read ? a.read(wrap) : true);
         if (keepOpen && a.read) {
           b.disabled = true;
+          b.classList.add('busy');
           let ok = false;
-          try { ok = await keepOpen(wrap); } finally { b.disabled = false; }
+          try { ok = await keepOpen(wrap); } finally { b.disabled = false; b.classList.remove('busy'); }
           if (!ok) return;
         }
         wrap.remove();

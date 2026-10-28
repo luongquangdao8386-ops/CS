@@ -700,4 +700,7 @@ export const DICT = {"rpt.title":["Phiếu kiểm tra thiết bị","设备点�
 "hist.window":["Lượt kiểm từ {D} (cũ hơn xem ở Bảng tháng / Báo cáo)","自 {D} 起的点检（更早请看月表/报表）"],
 "hist.queued_n":["{N} lượt đang chờ gửi (xem Nháp chờ gửi)","{N}次待上传（见待同步）"],
 "hist.none":["Chưa có lượt kiểm nào","暂无点检记录"],
-"melink.url_self":["Đây là link của chính Checksheet — cần dán link /exec của máy chủ M&E (link đang dùng trong app M&E)","这是点检表自己的链接——请粘贴M&E服务器的 /exec 链接（M&E应用中使用的链接）"]};
+"melink.url_self":["Đây là link của chính Checksheet — cần dán link /exec của máy chủ M&E (link đang dùng trong app M&E)","这是点检表自己的链接——请粘贴M&E服务器的 /exec 链接（M&E应用中使用的链接）"],
+"mac.saving":["Đang lưu…","保存中…"],
+"mac.assigned_ok":["Đã gán mẫu “{T}”","已分配模板“{T}”"],
+"tpl.assigning":["Đang gán cho {N} máy…","正在分配给{N}台设备…"]};

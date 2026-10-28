@@ -1295,3 +1295,6 @@ a.day { display: block; text-decoration: none; color: inherit; }
 .day-item.wk-plan .zh { display: none; }
 .home-week .cal-legend { margin-top: 6px; }
 .tile .t-red-text { color: var(--red); font-weight: 700; }
+.asg-card.saving { opacity: 0.75; border-style: dashed; }
+.badge .spinner.tiny { display: inline-block; vertical-align: -2px; border-color: rgba(23,50,79,0.25); border-top-color: var(--navy); }
+#toast .spinner.tiny { display: inline-block; vertical-align: -2px; border-color: rgba(255,255,255,0.35); border-top-color: #fff; }

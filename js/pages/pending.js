@@ -3,7 +3,7 @@ import { bi, esc, fmtDate, fmtDateTime, nameText, uuid } from '../core.js';
 import { ICON, dialog, toast, $, $$ } from '../ui.js';
 import { openAbnormals, missedPeriods, unconfirmedDays, mapOf, recs, roleLevel, myAreas, today, users, userName, weekday } from '../data.js';
 import { addDaysIso } from '../judge.js';
-import { writeOnline, writeWithPin, writeFail, oneLang } from '../form.js';
+import { writeOnline, writeWithPin, writeFail, oneLang, busy } from '../form.js';
 import { app, afterCommit } from '../app.js';
 import { periodLabel } from './check.js';
 
@@ -84,20 +84,20 @@ export async function renderPending(view, { shell }) {
     if (!a) return;
     const text = await askText(bi('pend.resolve'), 'pend.resolution', `<p><strong>${esc(a.item_name_vi || a.item_name_zh)}</strong>: ${esc(a.value_text)}</p>`);
     if (!text) return;
-    b.disabled = true;
+    busy(b, true);
     const res = await writeOnline('abnormal.resolve', { abnormal_id: a.abnormal_id, ...oneLang('resolution', text) }, { expected_version: a.record_version });
     if (res.ok) { toast(bi('pend.resolved'), 'ok'); await afterCommit(); again(); return; }
-    b.disabled = false;
+    busy(b, false);
     writeFail(res);
   }));
   $$('[data-reason]', view).forEach((b) => b.addEventListener('click', async () => {
     const [aid, wd, s] = b.dataset.reason.split('|');
     const text = await askText(bi('pend.write_reason'), 'pend.reason');
     if (!text) return;
-    b.disabled = true;
+    busy(b, true);
     const res = await writeOnline('missed.reason', { missed_id: uuid(), assignment_id: aid, work_date: wd, shift: s, ...oneLang('reason', text) });
     if (res.ok) { toast(bi('form.saved'), 'ok'); await afterCommit(); again(); return; }
-    b.disabled = false;
+    busy(b, false);
     writeFail(res);
   }));
   $$('[data-confirm]', view).forEach((b) => b.addEventListener('click', async () => {
@@ -108,10 +108,10 @@ export async function renderPending(view, { shell }) {
       actions: [{ label: bi('btn.cancel'), value: false }, { label: bi('pend.confirm_day'), kind: 'primary', value: true }]
     });
     if (!ok) return;
-    b.disabled = true;
+    busy(b, true);
     const res = await writeWithPin('day.confirm', { work_date: wd });
     if (res.ok) { toast(bi('pend.confirmed', { D: fmtDate(wd) }), 'ok'); await afterCommit(); again(); return; }
-    b.disabled = false;
+    busy(b, false);
     writeFail(res);
   }));
 }

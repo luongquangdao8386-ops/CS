@@ -1,7 +1,7 @@
 // Thiết bị: lấy một chiều từ M&E (chỉ sửa thiết bị ở M&E). Danh sách, chi tiết máy, mẫu đã gán và kỳ này,
 // gán/ngừng gán mẫu, tiêu chuẩn riêng của máy; "Cập nhật từ M&E" cho Trưởng bộ phận.
 import { bi, biText, esc, uuid, nameText, fmtDateTime } from '../core.js';
-import { ICON, dialog, toast, $, $$ } from '../ui.js';
+import { ICON, dialog, toast, h, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, roleLevel, boot, dueList, inMyAreas, templateItems } from '../data.js';
 import { writeOnline, writeFail, showErrors, busy } from '../form.js';
@@ -127,7 +127,7 @@ export async function renderMachine(view, { shell, params }) {
         <a class="btn small" href="#/reports?m=${encodeURIComponent(mac.machine_id)}">${ICON.reports}<span>${bi('nav.reports')}</span></a></div>
     </section>
     <h2 class="sec-title">${bi('mac.templates')}</h2>
-    ${active.map(asgCard).join('') || `<div class="card empty-state"><p class="muted">${bi(c3 ? 'mac.no_tpl_c3' : 'mac.no_tpl')}</p></div>`}
+    ${active.map(asgCard).join('') || `<div class="card empty-state asg-empty"><p class="muted">${bi(c3 ? 'mac.no_tpl_c3' : 'mac.no_tpl')}</p></div>`}
     ${c3 && mac.active ? `<div class="row"><button type="button" class="btn small primary" id="mc-assign"${dis}>${ICON.plus}<span>${bi('mac.assign')}</span></button></div>` : ''}
     ${stopped.length ? `<p class="muted small">${bi('mac.stopped')}: ${stopped.map((a) => esc(nameText(tpls.get(a.template_id)))).join(', ')}</p>` : ''}
     ${online || !c3 ? '' : `<p class="banner warn">${bi('sync.need_network')}</p>`}`;
@@ -143,11 +143,20 @@ export async function renderMachine(view, { shell, params }) {
       actions: [{ label: bi('btn.cancel'), value: null }, { label: bi('mac.assign'), kind: 'primary', read: (w) => $('#as-t', w).value }]
     });
     if (!tid) return;
+    // Hiện ngay thẻ mẫu "Đang lưu…" (máy chủ Apps Script ghi mất vài giây); lỗi thì gỡ thẻ và báo
+    const t = tpls.get(tid);
+    const temp = h(`<div class="card asg-card saving"><div class="row between"><strong>${esc(nameText(t))}</strong><span class="badge t-navy"><span class="spinner tiny"></span> ${bi('mac.saving')}</span></div>
+      <div class="muted small">${esc(t.template_code)} · ${bi('freq_each.' + t.frequency)}</div></div>`);
+    const empty = view.querySelector('.asg-empty');
+    if (empty) empty.replaceWith(temp); else ab.closest('.row').before(temp);
+    busy(ab, true);
     const old = stopped.find((a) => a.template_id === tid);
     const res = old
       ? await writeOnline('assignment.edit', { assignment_id: old.assignment_id, active: true }, { expected_version: old.record_version })
       : await writeOnline('assignment.edit', { assignment_id: uuid(), machine_id: mac.machine_id, template_id: tid });
-    if (res.ok) { toast(bi('form.saved'), 'ok'); await afterCommit(); again(); return; }
+    if (res.ok) { toast(bi('mac.assigned_ok', { T: nameText(t) }), 'ok'); await afterCommit(); if (view.isConnected) again(); return; }
+    temp.remove();
+    busy(ab, false);
     writeFail(res);
   });
   $$('[data-stop]', view).forEach((b) => b.addEventListener('click', async () => {
@@ -155,8 +164,13 @@ export async function renderMachine(view, { shell, params }) {
     const ok = await dialog({ title: bi('mac.unassign'), body: `<p>${bi('mac.unassign_q', { T: nameText(tpls.get(a.template_id)) })}</p>`,
       actions: [{ label: bi('btn.cancel'), value: false }, { label: bi('mac.unassign'), kind: 'danger', value: true }] });
     if (!ok) return;
+    const card = b.closest('.asg-card');
+    card.classList.add('saving');
+    busy(b, true);
     const res = await writeOnline('assignment.edit', { assignment_id: a.assignment_id, active: false }, { expected_version: a.record_version });
-    if (res.ok) { toast(bi('form.saved'), 'ok'); await afterCommit(); again(); return; }
+    if (res.ok) { toast(bi('form.saved'), 'ok'); await afterCommit(); if (view.isConnected) again(); return; }
+    card.classList.remove('saving');
+    busy(b, false);
     writeFail(res);
   }));
   $$('[data-ov]', view).forEach((b) => b.addEventListener('click', async () => {
