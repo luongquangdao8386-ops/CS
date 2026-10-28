@@ -55,6 +55,8 @@ test('iPhone: trang chủ như M&E (lưới ô, lịch tuần), 5 nút nav; Ki�
     assert.equal(await page.locator('.bnav > *').count(), 5);
     assert.equal(await page.locator('.home-hero img.brand-logo[src*="cs-tile.svg"]').count(), 1);
     assert.equal(await page.locator('.grid9 > .tile').count(), 9, 'Quản trị: đủ 9 ô');
+    assert.equal(await page.locator('.grid9 [href="#/history"]').count(), 1);
+    assert.ok(!(await page.textContent('.grid9')).includes('Quét'), 'không có ô Quét (đã có ở nav)');
     assert.ok((await page.textContent('.grid9')).includes('5 phiếu chưa kiểm'));
     assert.equal(await page.locator('.home-week .day').count(), 7);
     assert.ok(await noOverflow(page));
@@ -163,6 +165,20 @@ test('web: menu trái, Chờ xử lý — xử lý Không đạt, xác nhận ng
     await page.waitForSelector('.home-today tbody tr');
     assert.ok((await page.textContent('.home-week .day.today')).includes('✕ 1'), 'lịch tuần: hôm nay 1 phiếu Không đạt');
     await page.screenshot({ path: path.join(SHOTS, 'home-web.png') });
+    // Lịch sử kiểm: lượt vừa lưu, mục Không đạt, lọc Không đạt
+    await page.click('.grid9 [href="#/history"]');
+    await page.waitForSelector('tr[data-href]');
+    assert.equal(await page.locator('tr[data-href]').count(), 1);
+    assert.ok((await page.textContent('tbody')).includes('Áp suất khí nén'));
+    await page.click('[data-res="ok"]');
+    await page.waitForSelector('.empty-state');
+    await page.click('[data-res="fail"]');
+    await page.waitForSelector('tr[data-href]');
+    await page.fill('#hs-q', 'tb-0007');
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator('tr[data-href]').count(), 1);
+    await page.click('tr[data-href]');
+    await page.waitForSelector('.ci');
     // Bảng tháng web: bảng hạng mục × ngày có giá trị, biểu đồ xu hướng
     await go(page, '#/month');
     await page.waitForSelector('.mgrid');

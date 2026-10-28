@@ -6,7 +6,6 @@ import { isWide } from '../shell.js';
 import { recs, dueList, roleLevel, today, weekday, openAbnormals, missedPeriods, unconfirmedDays, users, userName, weekSummary } from '../data.js';
 import { queueItems } from '../sync.js';
 import { addDaysIso } from '../judge.js';
-import { scanAndOpen } from '../app.js';
 import { navigate } from '../router.js';
 import { stateBadge } from './today.js';
 import { periodLabel } from './check.js';
@@ -45,7 +44,7 @@ async function weekHtml() {
     <div class="cal-legend small"><span>✓ ${bi('state_short.DONE')}</span><span>! ${bi('state_short.WARN')}</span><span>✕ ${bi('state_short.FAIL')}</span><span>– ${bi('state.MISSED')}</span></div></section>`;
 }
 
-/** Lưới ô chức năng (3 cột như M&E); Trưởng bộ phận, Quản trị đủ 9 ô */
+/** Lưới ô chức năng (3 cột như M&E, không có ô Quét — Quét ở nav/menu); Trưởng bộ phận, Quản trị đủ 9 ô */
 async function gridHtml(due) {
   const lvl = roleLevel();
   const uid = session.user && session.user.user_id;
@@ -55,11 +54,13 @@ async function gridHtml(due) {
   const tpls = (await recs('TEMPLATE')).filter((t) => t.active).length;
   const lib = (await recs('LIBRARY_ITEM')).filter((x) => x.active !== false).length;
   const q = (await queueItems().catch(() => [])).filter((o) => o.user_id === uid && o.dataset_epoch === session.epoch).length;
+  const from7 = addDaysIso(today(), -6);
+  const runs7 = (await recs('RUN')).filter((r) => r.work_date >= from7).length;
   const pend = lvl >= 3 ? (await openAbnormals()).length + (await missedPeriods()).length + (await unconfirmedDays()).length : 0;
   const tiles = [
     { key: 'today', icon: 'checklist', href: '/today', tail: left ? bi('home.left_n', { N: left }) : (due.length ? bi('home.all_done_short') : ''), red: fail ? bi('home.fail_n', { N: fail }) : '' },
-    { key: 'scan', icon: 'scan', scan: true, tail: bi('home.scan_tail') },
     { key: 'month', icon: 'calendar', href: '/month' },
+    { key: 'history', icon: 'file', href: '/history', tail: runs7 ? bi('hist.n7', { N: runs7 }) : '' },
     { key: 'pending', icon: 'alert', href: '/pending', lvl: 3, red: pend ? bi('pend.count', { N: pend }) : '', tail: pend ? '' : bi('home.none_pending') },
     { key: 'machines', icon: 'equipment', href: '/machines', tail: macs ? bi('mac.count', { N: macs }) : '' },
     { key: 'templates', icon: 'work', href: '/templates', lvl: 3, tail: tpls ? bi('tpl.count', { N: tpls }) : '' },
@@ -68,8 +69,7 @@ async function gridHtml(due) {
     { key: 'drafts', icon: 'sync', href: '/account/drafts', tail: q ? bi('sync.queued_count', { N: q }) : bi('home.none_drafts') }
   ].filter((x) => !x.lvl || lvl >= x.lvl);
   return `<section class="grid9" aria-label="${esc(biText('menu.title'))}">${tiles.map((x) => {
-    const inner = `${ICON[x.icon]}<span class="tile-label">${bi('tile.' + x.key)}</span>${x.red ? `<span class="tile-count t-red-text">${x.red}</span>` : ''}${x.tail ? `<span class="tile-count">${x.tail}</span>` : ''}`;
-    return x.scan ? `<button type="button" class="tile tile-scan" id="h-scan">${inner}</button>` : `<a class="tile" href="#${x.href}">${inner}</a>`;
+    return `<a class="tile" href="#${x.href}">${ICON[x.icon]}<span class="tile-label">${bi('tile.' + x.key)}</span>${x.red ? `<span class="tile-count t-red-text">${x.red}</span>` : ''}${x.tail ? `<span class="tile-count">${x.tail}</span>` : ''}</a>`;
   }).join('')}</section>`;
 }
 
@@ -100,7 +100,5 @@ export async function renderHome(view, { shell }) {
       <div class="home-right">${await gridHtml(due)}</div>
       ${wide ? `<div class="home-bottom">${await todayTableHtml(due)}</div>` : ''}
     </div></div>`;
-  const sb = view.querySelector('#h-scan');
-  if (sb) sb.addEventListener('click', () => scanAndOpen());
   view.querySelectorAll('tr[data-href]').forEach((tr) => tr.addEventListener('click', () => navigate(tr.dataset.href)));
 }

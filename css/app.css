@@ -1294,6 +1294,4 @@ a.day { display: block; text-decoration: none; color: inherit; }
 .day-item.wk-plan .sep { display: none; }
 .day-item.wk-plan .zh { display: none; }
 .home-week .cal-legend { margin-top: 6px; }
-.tile-scan { font: inherit; cursor: pointer; background: var(--yellow) !important; border-color: var(--yellow) !important; color: var(--navy); }
-.tile-scan .tile-label .zh, .tile-scan .tile-count { color: var(--navy); }
 .tile .t-red-text { color: var(--red); font-weight: 700; }

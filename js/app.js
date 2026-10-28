@@ -162,6 +162,7 @@ function registerRoutes() {
   route('/check/:assignment', lazy('./pages/check.js', 'renderCheck'), { nav: 'today' });
   route('/m/:machine', lazy('./pages/machines.js', 'renderMachine'), { nav: 'machines' });
   route('/month', lazy('./pages/month.js', 'renderMonth'), { nav: 'month' });
+  route('/history', lazy('./pages/history.js', 'renderHistory'), { nav: 'home' });
   route('/pending', lazy('./pages/pending.js', 'renderPending'), { nav: 'pending' });
   route('/machines', lazy('./pages/machines.js', 'renderMachines'), { nav: 'machines' });
   route('/templates', lazy('./pages/templates.js', 'renderTemplates'), { nav: 'templates' });
@@ -231,7 +232,7 @@ window.addEventListener('resize', () => {
 
 // Màn xem (Hôm nay, Bảng tháng, Chờ xử lý, máy) vẽ lại sau khi tự gửi nháp xong.
 // Không vẽ lại màn nhập (kiểm tra, sửa mẫu), khi đang mở hộp thoại hoặc đang gõ.
-const VIEW_PAGE = /^\/(today|month|pending|machines|m\/[^/]+|account(\/drafts)?)?$/;
+const VIEW_PAGE = /^\/(today|history|month|pending|machines|m\/[^/]+|account(\/drafts)?)?$/;
 export function refreshAfterSend(r) {
   if (!app.shell) return;
   const path = currentPath();
