@@ -8,7 +8,7 @@ import { byId, recs, templateItems, roleLevel, can, today, nowMs, shifts, dayLoc
 import { effItem, judgeItem, stdText, warnText, fmtNumVi, stdBounds, currentPeriod, periodKey, periodSpan, addDaysIso, isoWeekKey } from '../judge.js';
 import { loadFormDraft, saveFormDraft, clearFormDraft } from '../form.js';
 import { processPhoto } from '../media.js';
-import { app, syncNow, updateSyncStatus } from '../app.js';
+import { app, syncNow, updateSyncStatus, refreshAfterSend } from '../app.js';
 import { navigate } from '../router.js';
 
 const MAX_PHOTOS = 3;
@@ -408,7 +408,7 @@ export async function renderCheck(view, { shell, params, query }) {
       toast(bi(s.fail ? 'chk.saved_fail' : 'chk.saved'), 'ok');
       await updateSyncStatus();
       navigate('/', { replace: true });
-      if (navigator.onLine && !app.offline) syncNow({ quiet: true });
+      if (navigator.onLine && !app.offline) syncNow({ quiet: true }).then(refreshAfterSend);
     } catch (err) {
       sv.disabled = false;
       toast(esc(err && err.message), 'err');

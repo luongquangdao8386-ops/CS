@@ -50,11 +50,12 @@ function choiceRow(c, j) {
 /**
  * Ô sửa một hạng mục. i: số thứ tự; opts: {move, del} có nút lên/xuống/xóa (trong mẫu)
  */
-export function itemEditorHtml(it, i, { move = false, del = false, count = 0 } = {}) {
+export function itemEditorHtml(it, i, { move = false, del = false, count = 0, closed = false } = {}) {
   const t = it.input_type || 'NUMBER';
   const choices = Array.isArray(it.choices_json) && it.choices_json.length ? it.choices_json : DEFAULT_CHOICES;
-  return `<div class="ie card it-${t}" data-ie="${i}" data-key="${esc(it.item_key || '')}" data-lib="${esc(it.library_item_id || '')}">
+  return `<div class="ie card it-${t}${closed ? ' closed' : ''}" data-ie="${i}" data-key="${esc(it.item_key || '')}" data-lib="${esc(it.library_item_id || '')}">
     <div class="ie-head"><span class="ie-no">${i + 1}</span><strong class="ie-title">${esc(it.name_vi || it.name_zh || biText('ie.new_item'))}</strong><span class="grow"></span>
+      ${move ? `<button type="button" class="btn tiny ie-toggle" data-toggle="${i}">${closed ? ICON.edit : ICON.up}<span>${bi(closed ? 'btn.edit' : 'ie.collapse')}</span></button>` : ''}
       ${move ? `<button type="button" class="icon-btn" data-up="${i}" aria-label="${esc(biText('ie.up'))}"${i === 0 ? ' disabled' : ''}>${ICON.up}</button>
         <button type="button" class="icon-btn" data-down="${i}" aria-label="${esc(biText('ie.down'))}"${i === count - 1 ? ' disabled' : ''}>${ICON.down}</button>` : ''}
       ${del ? `<button type="button" class="icon-btn" data-del="${i}" aria-label="${esc(biText('btn.delete'))}">${ICON.trash}</button>` : ''}</div>
@@ -154,6 +155,12 @@ export function wireItems(root) {
     box.addEventListener('input', () => refreshItem(box));
     box.addEventListener('change', () => refreshItem(box));
     box.addEventListener('click', (e) => {
+      const tg = e.target.closest('[data-toggle]');
+      if (tg) {
+        const closed = box.classList.toggle('closed');
+        tg.innerHTML = `${closed ? ICON.edit : ICON.up}<span>${bi(closed ? 'btn.edit' : 'ie.collapse')}</span>`;
+        return;
+      }
       if (e.target.closest('[data-ch-add]')) {
         const list = $('.ch-list', box);
         if ($$('.ch-row', list).length >= 8) return;

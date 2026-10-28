@@ -50,13 +50,13 @@ export async function monthData(machineId, ym) {
   };
 }
 
-/** Trạng thái ô của một kỳ: FAIL · WARN · DONE · PARTIAL · MISSED (bỏ sót) · REASON (bỏ sót có lý do) · '' (chưa tới/chưa gán) */
-function cellState(run, missedRec, span, asg) {
+/** Trạng thái ô của một kỳ: FAIL · WARN · DONE · PARTIAL · MISSED (bỏ sót) · REASON (bỏ sót có lý do) · '' (chưa tới/chưa gán)
+ * — cùng quy tắc với bảng của PDF (25_report.js): bỏ sót khi kỳ đã hết, gán còn hiệu lực và kỳ không trước ngày gán */
+function cellState(run, missedRec, span, asg, per) {
   if (run) return run.status === 'PARTIAL' ? 'PARTIAL' : run.fail_count ? 'FAIL' : run.warn_count ? 'WARN' : 'DONE';
   if (missedRec) return 'REASON';
   if (span.end > nowMs()) return '';
-  const start = asg && asg.start_date ? Date.parse(asg.start_date + 'T00:00:00+07:00') : 0;
-  if (!asg || span.end <= start) return '';
+  if (!asg || !asg.active || (asg.start_date && per.last < asg.start_date)) return '';
   return 'MISSED';
 }
 
@@ -83,7 +83,7 @@ export function monthModel(d, ym, { templateId = '', shift = '' } = {}) {
         const run = runByKey.get(p.key) || null;
         const missed = missByKey.get(p.key) || null;
         const span = periodSpan(tpl.frequency, p, s, sh);
-        return { ...p, shift: s, run, missed, state: cellState(run, missed, span, asg && asg.active ? asg : (run ? asg : null)) };
+        return { ...p, shift: s, run, missed, state: cellState(run, missed, span, asg, p) };
       });
       // Dòng: hạng mục phiên bản hiện tại, thêm hạng mục chỉ có trong lượt cũ
       const rows = [];
@@ -115,7 +115,8 @@ export function cellText(res) {
 /** Bảng hạng mục × kỳ (web, xem trước báo cáo) */
 export function gridHtml(g, { clickable = true } = {}) {
   const resBy = g.cols.map((c) => new Map(((c.run && c.run.results_json) || []).map((r) => [r.item_key, r])));
-  const tdHead = g.cols.map((c) => `<th class="gc-h${weekday(c.date) === 7 && g.tpl.frequency !== 'WEEK' && g.tpl.frequency !== 'MONTH' ? ' sun' : ''}">${esc(c.label)}</th>`).join('');
+  const t = today();
+  const tdHead = g.cols.map((c) => `<th class="gc-h${weekday(c.date) === 7 && g.tpl.frequency !== 'WEEK' && g.tpl.frequency !== 'MONTH' ? ' sun' : ''}${c.date <= t && c.last >= t ? ' today' : ''}">${esc(c.label)}</th>`).join('');
   const rowHtml = (row) => `<tr${clickable && (row.input_type === 'NUMBER' || row.input_type === 'THREE_PHASE') ? ` class="trend-row" data-item="${esc(row.item_key)}"` : ''}>
     <th class="gc-item"><span class="vi">${esc(row.name_vi || row.name_zh)}</span>${row.name_zh && row.name_vi ? `<span class="zh">${esc(row.name_zh)}</span>` : ''}</th>
     <td class="gc-std">${esc(row.std_vi || '')}</td>
@@ -134,6 +135,14 @@ export function gridHtml(g, { clickable = true } = {}) {
 function initials(name) {
   const p = String(name || '').trim().split(/\s+/);
   return p.length ? p[p.length - 1].slice(0, 6) : '';
+}
+
+/** Cuộn bảng tới cột hôm nay (tháng đang chạy, màn hẹp không thấy hết 31 cột) */
+export function scrollGridsToToday(root) {
+  root.querySelectorAll('.grid-wrap').forEach((w) => {
+    const th = w.querySelector('.gc-h.today');
+    if (th && w.scrollWidth > w.clientWidth) w.scrollLeft = Math.max(0, th.offsetLeft - w.clientWidth * 0.6);
+  });
 }
 
 /** Biểu đồ xu hướng một hạng mục số: đường giá trị, dải tiêu chuẩn, điểm tô theo kết quả (chạm để xem số) */
@@ -280,6 +289,7 @@ export async function renderMonth(view, { shell, query }) {
     $$('.trend-row', view).forEach((tr) => tr.addEventListener('click', () => go({ item: tr.dataset.item })));
     $$('.trend-row', view).forEach((tr) => tr.classList.toggle('on', tr.dataset.item === state.item));
     wireTrend(view);
+    scrollGridsToToday(view);
     return;
   }
 

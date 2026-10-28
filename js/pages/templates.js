@@ -122,10 +122,12 @@ export async function renderTemplateForm(view, { shell, params }) {
   </div>`;
   wireForm(view);
   const box = $('#tp-items', view);
-  // Đọc lại các ô đang sửa trước mỗi lần vẽ lại danh sách (thêm/xóa/đổi thứ tự)
-  const sync = () => { $$('.ie', box).forEach((b, i) => { const it = readItem(b, []); items[i] = { ...items[i], ...it }; }); };
+  // Ô đang mở (đang sửa) giữ mở qua các lần vẽ lại; hạng mục cũ thu gọn, hạng mục mới thêm thì mở
+  const open = new Set();
+  // Đọc lại các ô đang sửa trước mỗi lần vẽ lại danh sách (thêm/xóa/đổi thứ tự): sửa tại chỗ để giữ đúng đối tượng trong `open`
+  const sync = () => { $$('.ie', box).forEach((b, i) => { Object.assign(items[i], readItem(b, [])); if (b.classList.contains('closed')) open.delete(items[i]); else open.add(items[i]); }); };
   const draw = () => {
-    box.innerHTML = items.map((it, i) => itemEditorHtml(it, i, { move: true, del: true, count: items.length })).join('') || `<div class="card empty-state"><p class="muted">${bi('tpl.no_items')}</p></div>`;
+    box.innerHTML = items.map((it, i) => itemEditorHtml(it, i, { move: true, del: true, count: items.length, closed: !open.has(it) })).join('') || `<div class="card empty-state"><p class="muted">${bi('tpl.no_items')}</p></div>`;
     $('#tp-count', view).textContent = items.length ? `(${items.length})` : '';
     wireItems(box);
   };
@@ -140,10 +142,12 @@ export async function renderTemplateForm(view, { shell, params }) {
     draw();
   });
   $('#f-frequency', view).addEventListener('change', (e) => { freq = e.target.value; $('#shift-box', view).hidden = freq !== 'SHIFT'; });
-  $('#tp-lib', view).addEventListener('click', async () => { sync(); items.push(...await pickFromLibrary()); draw(); });
+  $('#tp-lib', view).addEventListener('click', async () => { sync(); const add = await pickFromLibrary(); add.forEach((x) => open.add(x)); items.push(...add); draw(); });
   $('#tp-blank', view).addEventListener('click', () => {
     sync();
-    items.push({ item_key: '', name_vi: '', name_zh: '', group_key: 'OTHER', input_type: 'NUMBER', std_type: 'RANGE', required: true });
+    const blank = { item_key: '', name_vi: '', name_zh: '', group_key: 'OTHER', input_type: 'NUMBER', std_type: 'RANGE', required: true };
+    open.add(blank);
+    items.push(blank);
     draw();
     const last = $$('.ie', box).pop();
     if (last) { last.scrollIntoView({ block: 'center' }); $('[data-k="name_vi"]', last).focus(); }
@@ -201,6 +205,7 @@ function showItemErrors(view, errors) {
     let box = null;
     if (m) {
       const card = $(`.ie[data-ie="${m[1]}"]`, view);
+      if (card) card.classList.remove('closed');
       const f = m[2] === 'name' ? 'name_vi' : m[2];
       box = card && ($(`[data-field="${f}"] > .ferr`, card) || $('.ie-preview', card));
     } else box = $(`[data-field="${(e.field || '').replace(/_(vi|zh)$/, '')}"] > .ferr`, view) || $(`[data-field="${e.field}"] > .ferr`, view);

@@ -51,7 +51,7 @@ async function renderRoute() {
   // Màn đã bị thay không được đổi tiêu đề/nút trên header nữa
   const pageShell = Object.assign(Object.create(shell), { setScreen: (o) => { if (seq === renderSeq) shell.setScreen(o); } });
   try {
-    await m.route.handler(view, { params: m.params, query: queryParams(), shell: pageShell, app, seq, entered, isCurrent: () => seq === renderSeq });
+    await m.route.handler(view, { params: m.params, query: Object.fromEntries(queryParams()), shell: pageShell, app, seq, entered, isCurrent: () => seq === renderSeq });
   } catch (e) {
     if (seq !== renderSeq) return;
     view.innerHTML = `<div class="card"><p class="banner warn">${bi('err.client')}: ${esc(e && e.message)}</p>${reloadFreshHtml()}</div>`;
@@ -231,7 +231,7 @@ window.addEventListener('resize', () => {
 // Màn xem (Hôm nay, Bảng tháng, Chờ xử lý, máy) vẽ lại sau khi tự gửi nháp xong.
 // Không vẽ lại màn nhập (kiểm tra, sửa mẫu), khi đang mở hộp thoại hoặc đang gõ.
 const VIEW_PAGE = /^\/(month|pending|machines|m\/[^/]+|account(\/drafts)?)?$/;
-function refreshAfterSend(r) {
+export function refreshAfterSend(r) {
   if (!app.shell) return;
   const path = currentPath();
   if (!r || !(r.committed || r.applied) || !VIEW_PAGE.test(path) || document.querySelector('.modal')) return;
