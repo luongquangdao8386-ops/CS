@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.1 (bản đầu, dựng THỬ trước)
+# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.1 (THỬ chạy và phát hành THẬT ngày 28/10/2026)
 
 Checksheet là app riêng, máy chủ riêng (dự án Apps Script riêng, bảng tính riêng), chỉ **đọc** danh sách thiết bị và khu vực từ M&E.
 Cách làm giống hệt M&E: dán `Code.gs` vào Apps Script, triển khai web app, mở trang app trên GitHub Pages.
@@ -93,7 +93,7 @@ Dùng khi muốn thử app trước khi nối M&E. **Làm trước Phần D**, v
 3. **Triển khai → Quản lý các bản triển khai** → bút chì → **Phiên bản mới** → **Triển khai** (link `/exec` giữ nguyên).
 4. App trên GitHub Pages tự cập nhật; máy đang mở app bấm **Tải lại bản mới** nếu được hỏi.
 
-## Phần I — Lên THẬT (sau khi nói "phát hành THẬT")
+## Phần I — Lên THẬT — đã xong 28/10/2026 (M&E THẬT 1.0.0-d4.12, `CS_MayChu_THAT`, trang `/CS/` dùng THẬT; còn trang thử `/CS-thu/` chờ repo `CS-thu`)
 
 1. M&E THẬT phải có bản `1.0.0-d4.12` (phát hành M&E trước, theo Phần U của M&E).
 2. Làm lại **Phần B** với dự án `CS_MayChu_THAT`, `ENV = THAT`; triển khai lấy link `/exec` THẬT.
