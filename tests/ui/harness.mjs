@@ -22,6 +22,11 @@ export function startStatic() {
       const f = path.join(ROOT, p);
       if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); res.end('nf'); return; }
       res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' });
+      // config.js trỏ tới /exec thật: trong test thay bằng link giả để mọi request đi vào máy chủ giả lập
+      if (p === 'config.js') {
+        res.end(fs.readFileSync(f, 'utf8').replace(/https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec/g, EXEC));
+        return;
+      }
       fs.createReadStream(f).pipe(res);
     });
     srv.listen(0, '127.0.0.1', () => resolve({ srv, origin: `http://127.0.0.1:${srv.address().port}` }));
