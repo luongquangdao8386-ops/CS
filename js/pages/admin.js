@@ -1,6 +1,6 @@
 // Quản trị (cần mạng): Người dùng và khu vực phụ trách, Giờ ca, Kết nối M&E, Logo trên báo cáo, Sao lưu, Nhật ký thao tác,
 // Trạng thái hệ thống, Dữ liệu mẫu (máy chủ THỬ)
-import { api, bi, biText, esc, badge, fmtDateTime, fmtNumber, session, uuid, resMsg, nameText, APP_BASE_URL, isValidExecUrl } from '../core.js';
+import { api, bi, biText, esc, badge, fmtDateTime, fmtNumber, session, uuid, resMsg, nameText, APP_BASE_URL, isValidExecUrl, execUrl } from '../core.js';
 import { $, $$, h, ICON, dialog, toast } from '../ui.js';
 import { isWide } from '../shell.js';
 import { roleLevel, isOwner, recs, boot } from '../data.js';
@@ -240,6 +240,7 @@ export async function renderMeLink(view, { shell }) {
     const url = readField(view, 'exec_url'), key = readField(view, 'key');
     const errs = [];
     if (!isValidExecUrl(url)) errs.push({ field: 'exec_url', key: 'melink.url_bad' });
+    else if (url === execUrl()) errs.push({ field: 'exec_url', key: 'melink.url_self' });
     if (!key || key.length < 24) errs.push({ field: 'key', key: 'melink.key_bad' });
     if (errs.length) { showErrors(view, errs); return; }
     busy(ev.target, true);
