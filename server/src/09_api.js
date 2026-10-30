@@ -24,6 +24,8 @@ var HANDLERS_ = {
   'day.confirm': function (ctx) { return dayConfirm_(ctx); },
   'template.edit': function (ctx) { return templateEdit_(ctx); },
   'template.archive': function (ctx) { return templateArchive_(ctx); },
+  'template.isoList': function (ctx) { return templateIsoList_(ctx); },
+  'template.isoSeed': function (ctx) { return templateIsoSeed_(ctx); },
   'library.edit': function (ctx) { return libraryEdit_(ctx); },
   'assignment.edit': function (ctx) { return assignmentEdit_(ctx); },
   'assignment.add': function (ctx) { return assignmentAdd_(ctx); },

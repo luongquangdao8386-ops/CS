@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.1 (THỬ chạy và phát hành THẬT ngày 28/10/2026)
+# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.2 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026)
 
 Checksheet là app riêng, máy chủ riêng (dự án Apps Script riêng, bảng tính riêng), chỉ **đọc** danh sách thiết bị và khu vực từ M&E.
 Cách làm giống hệt M&E: dán `Code.gs` vào Apps Script, triển khai web app, mở trang app trên GitHub Pages.
@@ -99,6 +99,30 @@ Dùng khi muốn thử app trước khi nối M&E. **Làm trước Phần D**, v
 2. Làm lại **Phần B** với dự án `CS_MayChu_THAT`, `ENV = THAT`; triển khai lấy link `/exec` THẬT.
 3. Gửi link `/exec` THẬT cho Claude: Claude cố định link trong `config.js` của repo `CS` và dựng trang thử riêng `CS-thu` (anh tạo repo trống `CS-thu`, public, rồi báo Claude).
 4. **Phần C, D, F** trên THẬT (không có Dữ liệu mẫu ở THẬT). Tải lại logo trên THẬT.
+
+## Phần J — Bản 1.0.0-d1.2: bộ mẫu theo biểu ISO cơ điện (BM-CĐ-xx)
+
+Thêm nút **Mẫu checksheet → Tạo bộ mẫu theo biểu ISO**: 23 mẫu soạn sẵn từ 21 biểu kiểm tra định kỳ trong bộ biểu ISO cơ điện
+(03-04, 07-01/02/03/04/06/07/10/11, 08-12, 09-10/11/12, 10-02/03/04, 11-03/04/07, 13-01/02; biểu 07-06 và 07-07 mỗi biểu hai mẫu).
+Mỗi mẫu mang **mã biểu mẫu** in trên PDF/Excel Bảng tháng (khối thông tin bên phải, tiêu đề từng mẫu, chân trang). Mẫu tự soạn
+cũng nhập được mã ở ô **Mã biểu mẫu ISO** trong màn sửa mẫu.
+
+Bản này đổi mã máy chủ, làm lần lượt trên **THỬ** (`CS_MayChu_THU`) rồi **THẬT** (`CS_MayChu_THAT`):
+
+1. **Quản trị → Sao lưu → Sao lưu ngay** (cho chắc).
+2. Mở dự án Apps Script → xóa hết `Code.gs` cũ → dán `Code.gs` mới (link raw Claude gửi) → **Lưu**.
+3. Chọn hàm **`migrateSchema`** → **Chạy**. Nhật ký phải có: `Thêm: Templates(form_code)`. Chạy lại lần hai báo `Thêm: không có` là đúng.
+4. **Triển khai → Quản lý các bản triển khai** → bút chì → **Phiên bản mới** → **Triển khai** (link `/exec` giữ nguyên).
+5. Trên app (Trưởng bộ phận hoặc Quản trị): **Mẫu checksheet → Tạo bộ mẫu theo biểu ISO** → bỏ chọn biểu không dùng → **Tạo các mẫu đã chọn** → nhập PIN.
+   Mẫu đã tạo hiện **Đã tạo · MS-xxxx**, bấm lại không tạo trùng (kể cả mẫu đã ngừng dùng).
+6. Mở từng mẫu → **Gán cho máy**. Ô tiêu chuẩn để trống "……" trên biểu (theo nhà sản xuất) đang là *Không đặt*:
+   đặt ở mẫu (áp cho mọi máy) hoặc **Thiết bị → Tiêu chuẩn riêng** (từng máy).
+7. Biểu kiểm theo **khu vực / nhóm** (khu vực kỹ thuật 09-12, bình chữa cháy 10-02, sprinkler – họng nước 10-03, đèn sự cố 10-04,
+   kho hóa chất 11-07, kính – nhựa cứng 13-01/02…): Checksheet chỉ gán mẫu cho *thiết bị lấy từ M&E*, nên tạo bên M&E một thiết bị
+   đại diện (vd "Khu vực kỹ thuật – Xưởng A", "Bình chữa cháy – Xưởng A") → **Cập nhật từ M&E** → gán mẫu.
+8. Kiểm thử: **Báo cáo** → chọn máy đã gán mẫu ISO → **Tải PDF** → thấy *Mã biểu mẫu: BM-CĐ-…* ở góc phải và chân trang.
+
+Nếu bấm *Tạo bộ mẫu* mà app báo **Máy chủ chưa chạy migrateSchema** → làm lại bước 3 rồi bước 4.
 
 ## Lưu ý an toàn
 

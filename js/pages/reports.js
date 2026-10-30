@@ -60,13 +60,14 @@ export async function renderReports(view, { shell, query }) {
     const due = cols.filter((c) => c.state).length, done = cols.filter((c) => c.run).length;
     return { due, done, rate: due ? Math.round(done / due * 100) : 0, fail: d.runs.reduce((s, r) => s + (r.fail_count || 0), 0), warn: d.runs.reduce((s, r) => s + (r.warn_count || 0), 0) };
   })();
+  const formCodes = [...new Set(model.map((g) => String(g.tpl.form_code || '').trim()).filter(Boolean))];
   view.innerHTML = head + `
     ${d.source === 'server' ? `<p class="muted small">${bi('month.from_server')}</p>` : ''}
     ${logo ? '' : `<p class="muted small">${bi('rp.no_logo')}${session.user && Number(session.user.role_level) >= 4 ? ` <a href="#/admin/report-logo">${bi('admin.report_logo')}</a>` : ''}</p>`}
     <div class="paper rp-paper">
       <div class="paper-head">${logo ? `<img class="paper-logo" src="${esc(logo.url)}" alt="">` : ''}
         <div class="paper-title"><div class="pt-vi">${esc(biText('rpt.title').split(' · ')[0].toUpperCase())}</div><div class="pt-zh">${esc(biText('rpt.title').split(' · ')[1] || '')}</div></div>
-        <div class="paper-meta-r small">${bi('rpt.month')}: <strong>${esc(ymLabel(f.ym))}</strong><br>${bi('rpt.generated_at')}: ${esc(fmtDateTime(new Date().toISOString()))}</div></div>
+        <div class="paper-meta-r small">${formCodes.length ? `${bi('rpt.form_code')}: <strong>${esc(formCodes.join(', '))}</strong><br>` : ''}${bi('rpt.month')}: <strong>${esc(ymLabel(f.ym))}</strong><br>${bi('rpt.generated_at')}: ${esc(fmtDateTime(new Date().toISOString()))}</div></div>
       <div class="paper-meta small"><span>${bi('rpt.machine')}: <strong>${esc(d.machine.machine_code)} · ${esc(nameText(d.machine))}</strong></span>
         <span>${bi('rpt.area')}: <strong>${esc(nameText(d.area) || '—')}</strong></span>${d.machine.model ? `<span>${bi('mac.model')}: ${esc(d.machine.model)}</span>` : ''}</div>
       <div class="paper-tiles">
@@ -75,7 +76,7 @@ export async function renderReports(view, { shell, query }) {
         <div class="paper-tile"><span>${bi('rpt.tile_fail')}</span><strong class="t-red-text">${tiles.fail}</strong></div>
         <div class="paper-tile"><span>${bi('rpt.tile_warn')}</span><strong class="t-amber-text">${tiles.warn}</strong></div>
       </div>
-      ${model.map((g) => `<h3 class="paper-sec">${esc(nameText(g.tpl))}${g.shift ? ' · ' + bi('shift.name' + g.shift) : ''} <span class="muted small">(${esc(g.tpl.template_code)} · ${bi('freq_each.' + g.tpl.frequency)})</span></h3>${gridHtml(g, { clickable: false })}`).join('') || `<p class="muted">${bi('month.no_data')}</p>`}
+      ${model.map((g) => `<h3 class="paper-sec">${esc(nameText(g.tpl))}${g.shift ? ' · ' + bi('shift.name' + g.shift) : ''} <span class="muted small">(${esc(g.tpl.template_code)}${g.tpl.form_code ? ' · ' + esc(g.tpl.form_code) : ''} · ${bi('freq_each.' + g.tpl.frequency)})</span></h3>${gridHtml(g, { clickable: false })}`).join('') || `<p class="muted">${bi('month.no_data')}</p>`}
       <p class="muted small">${bi('rpt.legend')}</p>
       <h3 class="paper-sec">${bi('rpt.abnormals')}</h3>
       ${abn.length ? `<div class="table-wrap"><table class="tbl paper-tbl"><thead><tr><th>${bi('rp.date')}</th><th>${bi('rpt.col_item')}</th><th>${bi('pend.value')}</th><th>${bi('rpt.col_std')}</th><th>${bi('chk.note')}</th><th>${bi('pend.resolution')}</th></tr></thead>
@@ -142,7 +143,7 @@ async function buildExcel(d, model, logo, um) {
   model.forEach((g) => {
     const aoa = [];
     for (let i = 0; i < top; i++) aoa.push([]);
-    aoa.push([title]);
+    aoa.push(g.tpl.form_code ? [title, '', `${biText('rpt.form_code')}: ${g.tpl.form_code}`] : [title]);
     aoa.push([`${biText('rpt.machine')}: ${d.machine.machine_code} · ${nameText(d.machine)}`, '', `${biText('rpt.area')}: ${nameText(d.area)}`]);
     aoa.push([`${biText('rpt.month')}: ${ymLabel(d.ym || f.ym)}`, '', `${nameText(g.tpl)}${g.shift ? ' · ' + biText('shift.n', { N: g.shift }) : ''} (${g.tpl.template_code})`]);
     aoa.push([]);

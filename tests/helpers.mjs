@@ -4,7 +4,7 @@ import { loadServer } from './gas-mock.mjs';
 export const OWNER_CODE = 'NV-001';
 export const OWNER_TEMP_PIN = '358024';
 export const OWNER_PIN = '604817';
-export const APP_VERSION = '1.0.0-d1.1';
+export const APP_VERSION = '1.0.0-d1.2';
 export const ME_EXEC = 'https://script.google.com/macros/s/TESTONLY_me_feed_deployment_00000/exec';
 export const ME_KEY = 'test-feed-key-0123456789abcdef0123';
 

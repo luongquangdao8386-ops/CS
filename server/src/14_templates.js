@@ -33,7 +33,7 @@ function normShifts_(v) {
 }
 
 /**
- * template.edit {template_id, name_vi|name_zh, frequency, shifts, note_vi|note_zh, items:[…]} (expected_version khi sửa)
+ * template.edit {template_id, name_vi|name_zh, frequency, shifts, note_vi|note_zh, form_code, items:[…]} (expected_version khi sửa)
  * Mẫu mới: template_id là UUID do app tạo. Hạng mục: item_key có sẵn (giữ khi sửa) hoặc để trống (hạng mục mới).
  */
 function templateEdit_(ctx) {
@@ -47,6 +47,9 @@ function templateEdit_(ctx) {
   if (FREQUENCIES_.indexOf(freq) < 0) errs.push(fieldError_('frequency', 'INVALID_VALUE'));
   var shifts = freq === 'SHIFT' ? normShifts_(p.shifts !== undefined ? p.shifts : (cur ? cur.shifts : '')) : '';
   if (freq === 'SHIFT' && !shifts) errs.push(fieldError_('shifts', 'SHIFTS_REQUIRED'));
+  // Mã biểu mẫu ISO in trên PDF (vd. BM-CĐ-07-02); không gửi = giữ nguyên
+  var formCode = p.form_code !== undefined ? trimStr_(p.form_code) : null;
+  if (formCode && formCode.length > 40) errs.push(fieldError_('form_code', 'FORM_CODE_LONG'));
   var curItems = cur ? templateItems_(id, cur.revision) : [];
   var byKey = {};
   curItems.forEach(function (r) { byKey[r.item_key] = r; });
@@ -96,6 +99,7 @@ function templateEdit_(ctx) {
       var row = Object.assign({}, now || {}, trT.values, { template_id: id, frequency: freq, shifts: shifts, i18n_meta: trT.meta });
       delete row.__row;
       if (p.active !== undefined) row.active = !!p.active; else if (!now) row.active = true;
+      if (formCode !== null) row.form_code = formCode; else if (!now) row.form_code = '';
       var writes = [];
       if (!now) {
         row.template_code = allocCode_(st, su, 'TEMPLATE');
@@ -119,7 +123,7 @@ function templateEdit_(ctx) {
         record_version: row.record_version,
         audit: {
           entity_type: 'TEMPLATE', entity_id: id, before_json: now ? { revision: now.revision, name_vi: now.name_vi, frequency: now.frequency } : null,
-          after_json: { revision: row.revision, name_vi: row.name_vi, frequency: row.frequency, shifts: row.shifts, items: items ? items.length : nowItems.length }
+          after_json: { revision: row.revision, name_vi: row.name_vi, frequency: row.frequency, shifts: row.shifts, form_code: row.form_code || '', items: items ? items.length : nowItems.length }
         }
       };
     }

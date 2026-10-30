@@ -1,10 +1,10 @@
 // Mẫu checksheet (Trưởng bộ phận, Quản trị): danh sách, sửa mẫu (tần suất, ca, hạng mục từ thư viện, tiêu chuẩn), gán cho
 // nhiều máy, ngừng dùng; thư viện hạng mục. Sửa hạng mục = phiên bản mới; lượt kiểm cũ giữ tiêu chuẩn lúc kiểm.
-import { bi, biText, esc, uuid, nameText, biName } from '../core.js';
+import { bi, biText, esc, uuid, nameText, biName, api, resMsg } from '../core.js';
 import { ICON, dialog, toast, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, roleLevel, shifts, templateItems, inMyAreas } from '../data.js';
-import { bilingualInputs, wireForm, showErrors, writeOnline, writeFail, busy } from '../form.js';
+import { bilingualInputs, wireForm, showErrors, writeOnline, writeWithPin, writeFail, busy } from '../form.js';
 import { app, afterCommit } from '../app.js';
 import { navigate } from '../router.js';
 import { itemEditorHtml, readItem, wireItems, GROUPS } from '../std-edit.js';
@@ -36,15 +36,16 @@ export async function renderTemplates(view, { shell }) {
   const nMac = (t) => asg.filter((a) => a.template_id === t.template_id && a.active).length;
   const online = navigator.onLine && !app.offline;
   const rows = tpls.map((t) => isWide()
-    ? `<tr data-href="#/templates/${encodeURIComponent(t.template_id)}"><td class="code">${esc(t.template_code)}</td><td>${biName(t)}${t.active ? '' : ` <span class="badge t-grey">${bi('tpl.archived')}</span>`}</td>
+    ? `<tr data-href="#/templates/${encodeURIComponent(t.template_id)}"><td class="code">${esc(t.template_code)}${t.form_code ? `<div class="muted small">${esc(t.form_code)}</div>` : ''}</td><td>${biName(t)}${t.active ? '' : ` <span class="badge t-grey">${bi('tpl.archived')}</span>`}</td>
         <td>${freqLabel(t)}</td><td class="num">${nItems(t)}</td><td class="num">${nMac(t)}</td><td class="num">${t.revision}</td></tr>`
     : `<a class="card rec-card link-card" href="#/templates/${encodeURIComponent(t.template_id)}">
-        <div class="rec-top"><span class="code">${esc(t.template_code)}</span>${t.active ? '' : `<span class="badge t-grey">${bi('tpl.archived')}</span>`}</div>
+        <div class="rec-top"><span class="code">${esc(t.template_code)}${t.form_code ? ` <span class="muted small">· ${esc(t.form_code)}</span>` : ''}</span>${t.active ? '' : `<span class="badge t-grey">${bi('tpl.archived')}</span>`}</div>
         <div class="rec-name">${biName(t)}</div>
         <div class="muted small">${freqLabel(t)} · ${bi('home.items_n', { N: nItems(t) })} · ${bi('tpl.machines_n', { N: nMac(t) })} · ${bi('rpt.revision', { N: t.revision })}</div></a>`).join('');
   view.innerHTML = `<div class="toolbar"><div class="row">
       <a class="btn small primary${online ? '' : ' disabled'}" href="#/templates/new">${ICON.plus}<span>${bi('tpl.new')}</span></a>
       <a class="btn small" href="#/templates/library">${ICON.library}<span>${bi('tpl.library')}</span></a>
+      <button type="button" class="btn small" id="tp-iso"${online ? '' : ' disabled'}>${ICON.plus}<span>${bi('tpl.iso_btn')}</span></button>
       ${archivedN ? `<button type="button" class="btn small" id="tp-arch">${bi(showArchived ? 'tpl.hide_archived' : 'tpl.show_archived', { N: archivedN })}</button>` : ''}</div></div>
     ${online ? '' : `<p class="banner warn">${bi('sync.need_network')}</p>`}
     <p class="muted small">${bi('tpl.list_hint')}</p>
@@ -53,6 +54,44 @@ export async function renderTemplates(view, { shell }) {
   $$('tr[data-href]', view).forEach((tr) => tr.addEventListener('click', () => { location.hash = tr.dataset.href; }));
   const ab = $('#tp-arch', view);
   if (ab) ab.addEventListener('click', () => { showArchived = !showArchived; renderTemplates(view, { shell }); });
+  $('#tp-iso', view).addEventListener('click', async (ev) => { if (await isoDialog(ev.currentTarget)) renderTemplates(view, { shell }); });
+}
+
+/**
+ * Bộ mẫu theo biểu ISO cơ điện (BM-CĐ-xx): máy chủ giữ sẵn nội dung; chọn mẫu → PIN → tạo (chưa gán máy).
+ * Mẫu đã tạo (kể cả đã ngừng) không tạo lại.
+ */
+async function isoDialog(btn) {
+  busy(btn, true);
+  const r = await api('template.isoList', {}, { retry: true });
+  busy(btn, false);
+  if (!r.ok) { toast(esc(resMsg(r)), 'err'); return false; }
+  const list = r.data.templates || [];
+  const left = list.filter((t) => !t.exists);
+  const row = (t) => `<label class="check lib-pick iso-pick"><input type="checkbox" value="${esc(t.key)}"${t.exists ? ' disabled' : ' checked'}>
+    <span><span class="code">${esc(t.form_code)}</span> ${esc(nameText(t))}
+    <span class="muted small"> · ${bi('freq_each.' + t.frequency)} · ${bi('home.items_n', { N: t.items })}${t.exists ? ` · <span class="badge t-grey">${bi('tpl.iso_exists', { C: t.template_code })}</span>` : ''}</span></span></label>`;
+  const keys = await dialog({
+    title: bi('tpl.iso_title'),
+    wide: true,
+    body: `<p class="muted small">${bi('tpl.iso_hint')}</p>
+      ${r.data.migrated === false ? `<p class="banner warn" id="iso-migrate">${bi('tpl.iso_migrate')}</p>` : ''}
+      ${left.length ? `<label class="check"><input type="checkbox" id="iso-all" checked><span>${bi('tpl.iso_all', { N: left.length })}</span></label>` : `<p class="muted">${bi('tpl.iso_none_left')}</p>`}
+      <div class="lib-list" id="iso-list">${list.map(row).join('')}</div>`,
+    actions: [{ label: bi('btn.cancel'), value: null }].concat(left.length && r.data.migrated !== false
+      ? [{ label: bi('tpl.iso_create'), kind: 'primary', read: (w) => $$('#iso-list input:checked', w).map((i) => i.value) }] : []),
+    onOpen: (w) => {
+      const all = $('#iso-all', w);
+      if (all) all.addEventListener('change', () => { $$('#iso-list input:not([disabled])', w).forEach((i) => { i.checked = all.checked; }); });
+    }
+  });
+  if (!keys || !keys.length) return false;
+  busy(btn, true);
+  const res = await writeWithPin('template.isoSeed', { keys });
+  busy(btn, false);
+  if (res.ok) { toast(bi('tpl.iso_created', { N: (res.data.created || []).length }), 'ok'); await afterCommit(); return true; }
+  writeFail(res);
+  return false;
 }
 
 /** Chọn hạng mục từ thư viện (nhiều mục một lần) */
@@ -103,6 +142,8 @@ export async function renderTemplateForm(view, { shell, params }) {
         <div class="fld" data-field="shifts" id="shift-box"${freq === 'SHIFT' ? '' : ' hidden'}><label>${bi('tpl.shifts')}</label>
           <div class="row">${sh.map((s) => `<label class="check"><input type="checkbox" data-shift="${s.no}"${curShifts.includes(String(s.no)) ? ' checked' : ''}><span>${bi('shift.name' + s.no)} <span class="muted small">${esc(s.start)}–${esc(s.end)}</span></span></label>`).join('')}</div><div class="ferr"></div></div>
       </div>
+      <div class="fld" data-field="form_code"><label for="f-form_code">${bi('tpl.form_code')}</label>
+        <input class="inp" id="f-form_code" maxlength="40" autocomplete="off" value="${esc(tpl ? tpl.form_code || '' : '')}" placeholder="BM-CĐ-07-02"><div class="muted small">${bi('tpl.form_code_hint')}</div><div class="ferr"></div></div>
       ${bilingualInputs('note', tpl, { labelKey: 'tpl.note', required: false, maxlength: 300, area: true })}
       ${isNew ? '' : `<p class="muted small">${bi('tpl.revision_hint')}</p>`}
     </section>
@@ -160,6 +201,7 @@ export async function renderTemplateForm(view, { shell, params }) {
     const p = {
       template_id: id, name_vi: $('#f-name_vi', view).value.trim(), name_zh: $('#f-name_zh', view).value.trim(),
       note_vi: $('#f-note_vi', view).value.trim(), note_zh: $('#f-note_zh', view).value.trim(),
+      form_code: $('#f-form_code', view).value.trim(),
       frequency: $('#f-frequency', view).value, shifts: $$('[data-shift]', view).filter((c) => c.checked).map((c) => c.dataset.shift), items: its
     };
     if (!p.name_vi && !p.name_zh) errs.push({ field: 'name', key: 'field.one_lang' });

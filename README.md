@@ -4,11 +4,13 @@ App kiểm tra thiết bị hằng ngày (checksheet): Google Sheets + Apps Scri
 Cùng bố cục, màu sắc và lõi đăng nhập/đồng bộ với app M&E. Giao diện luôn song ngữ Việt · 中文. Đăng nhập bằng mã nhân viên + PIN 6 số.
 
 **Trạng thái:** bản `1.0.0-d1.1` — THỬ chạy từ 28/10/2026 (nối M&E THỬ); phát hành THẬT 28/10/2026 (`/CS/` → `CS_MayChu_THAT`, nối M&E THẬT 1.0.0-d4.12). Trang thử riêng `/CS-thu/` (repo `CS-thu`).
+Bản `1.0.0-d1.2` (30/10/2026, nhánh `claude/iso-templates`): bộ mẫu theo biểu ISO cơ điện BM-CĐ-xx + mã biểu mẫu trên PDF/Excel Bảng tháng — xem Phần J của HUONG_DAN_TRIEN_KHAI.md.
 
 ## App làm gì
 
 - **Thiết bị và khu vực lấy một chiều từ M&E** (cửa chỉ-đọc `feed.equipment` của M&E, mỗi giờ hoặc bấm *Cập nhật từ M&E*). Thiết bị chỉ sửa ở M&E. Tem QR M&E đang dán trên máy quét được luôn trong Checksheet.
 - **Mẫu checksheet** có phiên bản: tần suất mỗi ca / ngày / tuần / tháng; hạng mục lấy từ thư viện (~34 hạng mục có sẵn: nhiệt độ, áp suất, điện áp, dòng 3 pha, độ rung, mức dầu, rò rỉ…) hoặc tự thêm. Kiểu tiêu chuẩn: khoảng, tối đa, tối thiểu, định mức ± %, không có; ngưỡng *Cần chú ý*; dòng 3 pha tự tính lệch pha. Tiêu chuẩn riêng cho từng máy.
+- **Bộ mẫu theo biểu ISO** (d1.2): nút *Tạo bộ mẫu theo biểu ISO* tạo sẵn 23 mẫu từ bộ biểu kiểm tra BM-CĐ-xx của công ty (chưa gán máy, không tạo trùng); mỗi mẫu có **mã biểu mẫu** in trên PDF/Excel Bảng tháng.
 - **Màn kiểm**: tiêu chuẩn hiện ngay cạnh ô nhập, gõ tới đâu tô màu tới đó (Đạt / Cần chú ý / Không đạt), Không đạt bắt buộc ghi chú, chụp ảnh. Mất mạng vẫn lưu trên máy, có mạng tự gửi. Máy chủ đánh giá lại khi lưu và lưu kèm tiêu chuẩn lúc kiểm.
 - **Trưởng bộ phận**: mục Không đạt chờ xử lý, máy bỏ sót kỳ kiểm (ghi lý do), xác nhận ngày (khóa sửa). Mỗi người chỉ thấy khu vực mình phụ trách.
 - **Bảng tháng** (lịch trên iPhone, bảng như phiếu giấy + biểu đồ xu hướng trên web) và **báo cáo** mỗi máy mỗi tháng: PDF (máy chủ dựng, logo công ty ở đầu trang) và Excel (có logo).

@@ -29,7 +29,7 @@ var SHEETS = {
   LibraryItems: { book: 'B', dot: 1, key: 'item_id', c: true, i18n: true,
     cols: 'item_id ' + STD_COLS_ + ' sort_order active builtin' },
   Templates: { book: 'B', dot: 1, key: 'template_id', c: true, i18n: true,
-    cols: 'template_id template_code name_vi name_zh frequency shifts revision active note_vi note_zh' },
+    cols: 'template_id template_code name_vi name_zh frequency shifts revision active note_vi note_zh form_code' },
   // Mỗi lần sửa mẫu = một phiên bản mới (đủ các dòng); item_key giữ nguyên qua các phiên bản (tiêu chuẩn riêng theo máy dựa vào đó)
   TemplateItems: { book: 'B', dot: 1, key: 'template_item_id', c: true, i18n: true,
     cols: 'template_item_id template_id revision item_key step_no ' + STD_COLS_ + ' required photo_on_fail library_item_id' },

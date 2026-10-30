@@ -1,5 +1,5 @@
 /**
- * Checksheet · 点检表 — Code.gs 1.0.0-d1.1
+ * Checksheet · 点检表 — Code.gs 1.0.0-d1.2
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script Checksheet.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'CS';
-var SERVER_VERSION = '1.0.0-d1.1';
+var SERVER_VERSION = '1.0.0-d1.2';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.0.0';
 var TZ = 'Asia/Ho_Chi_Minh';
@@ -402,7 +402,7 @@ var SHEETS = {
   LibraryItems: { book: 'B', dot: 1, key: 'item_id', c: true, i18n: true,
     cols: 'item_id ' + STD_COLS_ + ' sort_order active builtin' },
   Templates: { book: 'B', dot: 1, key: 'template_id', c: true, i18n: true,
-    cols: 'template_id template_code name_vi name_zh frequency shifts revision active note_vi note_zh' },
+    cols: 'template_id template_code name_vi name_zh frequency shifts revision active note_vi note_zh form_code' },
   // Mỗi lần sửa mẫu = một phiên bản mới (đủ các dòng); item_key giữ nguyên qua các phiên bản (tiêu chuẩn riêng theo máy dựa vào đó)
   TemplateItems: { book: 'B', dot: 1, key: 'template_item_id', c: true, i18n: true,
     cols: 'template_item_id template_id revision item_key step_no ' + STD_COLS_ + ' required photo_on_fail library_item_id' },
@@ -976,6 +976,9 @@ var SUB_MSG = {
   CHOICES_REQUIRED: ['Kiểu chọn cần ít nhất hai lựa chọn, có lựa chọn Đạt', '选择型至少两个选项，且须有合格项'],
   ITEMS_REQUIRED: ['Mẫu cần ít nhất một hạng mục', '模板至少需要一个项目'],
   SHIFTS_REQUIRED: ['Kiểm theo ca: chọn ít nhất một ca', '按班点检：至少选择一个班次'],
+  ISO_ALL_EXIST: ['Các mẫu đã chọn đều đã được tạo', '所选模板均已创建'],
+  MIGRATE_REQUIRED: ['Máy chủ chưa chạy migrateSchema (thiếu cột form_code)', '服务器尚未运行migrateSchema（缺少form_code列）'],
+  FORM_CODE_LONG: ['Mã biểu mẫu tối đa 40 ký tự', '表单编号最多40个字符'],
   SHIFTS_INVALID: ['Giờ các ca không hợp lệ', '班次时间无效'],
   FAIL_NOTE_REQUIRED: ['Mục Không đạt phải có ghi chú', '不合格项目须填写备注'],
   PERIOD_INVALID: ['Ngày/ca của lượt kiểm không hợp lệ', '点检日期/班次无效'],
@@ -1709,6 +1712,8 @@ var ACTION_TABLE_ = [
   // Mẫu, thư viện hạng mục, gán máy, thiết bị
   'template.edit|3|net|W',
   'template.archive|3|net|W',
+  'template.isoList|3|net|R',
+  'template.isoSeed|3|pin|W',
   'library.edit|3|net|W',
   'assignment.edit|3|net|W',
   'assignment.add|3|net|W',
@@ -2197,6 +2202,8 @@ var HANDLERS_ = {
   'day.confirm': function (ctx) { return dayConfirm_(ctx); },
   'template.edit': function (ctx) { return templateEdit_(ctx); },
   'template.archive': function (ctx) { return templateArchive_(ctx); },
+  'template.isoList': function (ctx) { return templateIsoList_(ctx); },
+  'template.isoSeed': function (ctx) { return templateIsoSeed_(ctx); },
   'library.edit': function (ctx) { return libraryEdit_(ctx); },
   'assignment.edit': function (ctx) { return assignmentEdit_(ctx); },
   'assignment.add': function (ctx) { return assignmentAdd_(ctx); },
@@ -3052,7 +3059,7 @@ function normShifts_(v) {
 }
 
 /**
- * template.edit {template_id, name_vi|name_zh, frequency, shifts, note_vi|note_zh, items:[…]} (expected_version khi sửa)
+ * template.edit {template_id, name_vi|name_zh, frequency, shifts, note_vi|note_zh, form_code, items:[…]} (expected_version khi sửa)
  * Mẫu mới: template_id là UUID do app tạo. Hạng mục: item_key có sẵn (giữ khi sửa) hoặc để trống (hạng mục mới).
  */
 function templateEdit_(ctx) {
@@ -3066,6 +3073,9 @@ function templateEdit_(ctx) {
   if (FREQUENCIES_.indexOf(freq) < 0) errs.push(fieldError_('frequency', 'INVALID_VALUE'));
   var shifts = freq === 'SHIFT' ? normShifts_(p.shifts !== undefined ? p.shifts : (cur ? cur.shifts : '')) : '';
   if (freq === 'SHIFT' && !shifts) errs.push(fieldError_('shifts', 'SHIFTS_REQUIRED'));
+  // Mã biểu mẫu ISO in trên PDF (vd. BM-CĐ-07-02); không gửi = giữ nguyên
+  var formCode = p.form_code !== undefined ? trimStr_(p.form_code) : null;
+  if (formCode && formCode.length > 40) errs.push(fieldError_('form_code', 'FORM_CODE_LONG'));
   var curItems = cur ? templateItems_(id, cur.revision) : [];
   var byKey = {};
   curItems.forEach(function (r) { byKey[r.item_key] = r; });
@@ -3115,6 +3125,7 @@ function templateEdit_(ctx) {
       var row = Object.assign({}, now || {}, trT.values, { template_id: id, frequency: freq, shifts: shifts, i18n_meta: trT.meta });
       delete row.__row;
       if (p.active !== undefined) row.active = !!p.active; else if (!now) row.active = true;
+      if (formCode !== null) row.form_code = formCode; else if (!now) row.form_code = '';
       var writes = [];
       if (!now) {
         row.template_code = allocCode_(st, su, 'TEMPLATE');
@@ -3138,7 +3149,7 @@ function templateEdit_(ctx) {
         record_version: row.record_version,
         audit: {
           entity_type: 'TEMPLATE', entity_id: id, before_json: now ? { revision: now.revision, name_vi: now.name_vi, frequency: now.frequency } : null,
-          after_json: { revision: row.revision, name_vi: row.name_vi, frequency: row.frequency, shifts: row.shifts, items: items ? items.length : nowItems.length }
+          after_json: { revision: row.revision, name_vi: row.name_vi, frequency: row.frequency, shifts: row.shifts, form_code: row.form_code || '', items: items ? items.length : nowItems.length }
         }
       };
     }
@@ -5530,7 +5541,9 @@ function reportPdfAction_(ctx) {
   var macName = (mac.name_vi || '') + (mac.name_zh ? ' · ' + mac.name_zh : '');
   var title = lab_('rpt.title');
   var nowIso = isoVN_(now_());
-  var footer = title + ' · ' + code + ' · ' + mac.machine_code + ' · ' + lab_('rpt.generated_at') + ' ' + fmtDateVN_(nowIso) + ' ' + nowIso.slice(11, 16);
+  // Mã biểu mẫu ISO của các mẫu trong phiếu (Templates.form_code), in ở khối thông tin bên phải và chân trang
+  var formCodes = tpls.map(function (t) { return trimStr_(t.form_code); }).filter(function (c, i, a) { return c && a.indexOf(c) === i; });
+  var footer = (formCodes.length ? formCodes.join(', ') + ' · ' : '') + title + ' · ' + code + ' · ' + mac.machine_code + ' · ' + lab_('rpt.generated_at') + ' ' + fmtDateVN_(nowIso) + ' ' + nowIso.slice(11, 16);
   var pd = pdfStart_({ wide: true, footer: footer });
   var tp = LABELS['rpt.title'] || ['', ''];
   pdfTitle_(pd, tp[0].toUpperCase(), tp[1]);
@@ -5539,11 +5552,11 @@ function reportPdfAction_(ctx) {
     [lab_('rpt.machine'), mac.machine_code + ' · ' + macName],
     [lab_('rpt.area'), areaName || '—'],
     [lab_('rpt.month'), md.ym.slice(5, 7) + '/' + md.ym.slice(0, 4)]
-  ], [
+  ], (formCodes.length ? [[lab_('rpt.form_code'), formCodes.join(', ')]] : []).concat([
     [lab_('rpt.number'), code],
     [lab_('rpt.generated_at'), fmtDateVN_(nowIso) + ' ' + nowIso.slice(11, 16)],
     [lab_('rpt.prepared_by'), ctx.user.display_name]
-  ]);
+  ]));
   var people = { list: [], map: {} };
   var shiftsAll = shiftsCfg_();
   tpls.forEach(function (tpl) {
@@ -5556,7 +5569,7 @@ function reportPdfAction_(ctx) {
         var sc = shiftsAll.filter(function (x) { return String(x.no) === sh; })[0];
         shTxt = ' · ' + lab_('rpt.shift', { N: sh }) + (sc ? ' (' + sc.start + ' – ' + sc.end + ')' : '');
       }
-      pdfHeading_(pd, tpl.template_code + ' · ' + (tpl.name_vi || tpl.name_zh) + ' · ' + lab_('freq.' + tpl.frequency) + shTxt + ' · ' + lab_('rpt.revision', { N: tpl.revision }), 8);
+      pdfHeading_(pd, tpl.template_code + (trimStr_(tpl.form_code) ? ' · ' + trimStr_(tpl.form_code) : '') + ' · ' + (tpl.name_vi || tpl.name_zh) + ' · ' + lab_('freq.' + tpl.frequency) + shTxt + ' · ' + lab_('rpt.revision', { N: tpl.revision }), 8);
       var rate = g.counts.due ? Math.round(g.counts.done / g.counts.due * 1000) / 10 : 0;
       pdfTiles_(pd, [
         { label: lab_('rpt.tile_runs'), value: g.counts.done + '/' + g.counts.due },
@@ -5694,6 +5707,574 @@ function sampleSeedAction_(ctx) {
   return seedSample_(ctx.user.user_id);
 }
 
+// ===== 27_iso.js =====
+/* 27_iso: bộ mẫu checksheet soạn từ bộ biểu mẫu ISO cơ điện của công ty (BM-CĐ-xx, người dùng yêu cầu 30/10/2026).
+ * Mỗi mẫu mang mã biểu mẫu (Templates.form_code) in trên PDF Bảng tháng. Hạng mục, tiêu chuẩn lấy đúng chữ trên biểu;
+ * ô "……" của biểu (điền theo nhà sản xuất / tiêu chuẩn công ty) để tiêu chuẩn "Không đặt" — Trưởng bộ phận đặt ở mẫu
+ * hoặc tiêu chuẩn riêng theo máy. Hạng mục chỉ có ở một số máy/khu (diesel, xe điện, lò hơi…) không bắt buộc.
+ * template.isoSeed tạo các mẫu được chọn (chưa gán máy); mẫu đã tạo (kể cả đã ngừng) không tạo lại. */
+
+var ISO_PF_ = 'PASS_FAIL';
+
+/** Hạng mục Đạt/Không đạt: tên, tiêu chuẩn chấp nhận (chữ), bắt buộc */
+function isoPf_(vi, zh, stdVi, stdZh, req) {
+  return { group_key: 'VISUAL', name_vi: vi, name_zh: zh, input_type: ISO_PF_, std_type: 'NONE', std_text_vi: stdVi || '', std_text_zh: stdZh || '', required: req !== false };
+}
+
+/** Hạng mục số: nhóm, tên, đơn vị, kiểu tiêu chuẩn (RANGE/MAX/MIN/NONE), giới hạn; o: {req, stdVi, stdZh, type: THREE_PHASE, imb} */
+function isoNum_(group, vi, zh, unit, std, min, max, o) {
+  o = o || {};
+  var it = { group_key: group, name_vi: vi, name_zh: zh, input_type: o.type || 'NUMBER', unit: unit || '', std_type: std || 'NONE',
+    std_min: min === undefined ? null : min, std_max: max === undefined ? null : max, required: o.req !== false,
+    std_text_vi: o.stdVi || (std === 'NONE' || !std ? 'Theo nhà sản xuất / tiêu chuẩn công ty' : ''),
+    std_text_zh: o.stdZh || (std === 'NONE' || !std ? '按厂家/公司标准' : '') };
+  if (o.type === 'THREE_PHASE') it.extra_json = { imb_max: o.imb || 10 };
+  return it;
+}
+
+function isoText_(vi, zh, req) {
+  return { group_key: 'OTHER', name_vi: vi, name_zh: zh, input_type: 'TEXT', std_type: 'NONE', required: req === true };
+}
+
+var ISO_OPT_ = { req: false };
+var ISO_STD_MFR_ = ['Theo nhà sản xuất / tiêu chuẩn công ty', '按厂家/公司标准'];
+
+/**
+ * Bộ mẫu. key = mã sheet trên biểu (duy nhất), form_code = mã biểu mẫu in trên PDF, frequency SHIFT|DAY|WEEK|MONTH.
+ */
+var ISO_TEMPLATES_ = [
+  { key: 'BM-CĐ-03-04', form_code: 'BM-CĐ-03-04', frequency: 'SHIFT',
+    name_vi: 'Kiểm tra máy đầu ca của người vận hành', name_zh: '操作员班前设备点检',
+    note_vi: 'Sản xuất thực hiện; mục 1–4 (an toàn) không đạt thì không chạy máy. Thêm hạng mục riêng của máy nếu cần.',
+    note_zh: '由生产执行；第1–4项（安全）不合格不得开机。可按设备增加专用项目。',
+    items: [
+      isoPf_('Dừng khẩn', '急停', 'Nhấn thử – máy dừng ngay', '试按—设备立即停止'),
+      isoPf_('Cửa che', '防护门', 'Mở cửa – máy không chạy', '开门—设备不能运行'),
+      isoPf_('Rèm quang, cảm biến an toàn', '光幕、安全传感器', 'Che – máy dừng', '遮挡—停机'),
+      isoPf_('Che chắn truyền động', '传动防护罩', 'Đủ, chắc', '齐全、牢固'),
+      isoPf_('Khí nén', '气压', 'Kim đồng hồ ở vùng xanh', '压力表指针在绿区'),
+      isoPf_('Dầu bôi trơn / thủy lực', '润滑油/液压油', 'Đủ mức', '油位正常'),
+      isoPf_('Rò rỉ dầu, khí, nước', '漏油、漏气、漏水', 'Không có', '无'),
+      isoPf_('Tiếng ồn, rung, mùi lạ', '噪音、振动、异味', 'Bình thường', '正常'),
+      isoPf_('Đèn báo, màn hình', '指示灯、触摸屏', 'Không báo lỗi', '无报警'),
+      isoPf_('Dây điện, ổ cắm', '电线、插座', 'Không dập, không hở', '无破损、无裸露'),
+      isoPf_('Tủ điện', '电柜', 'Đóng cửa, không nóng', '门已关、无过热'),
+      isoPf_('Vệ sinh', '清洁', 'Không bụi giấy, dầu đọng', '无纸尘、无积油'),
+      isoPf_('Vật lạ trên máy, đường giấy', '设备及纸路异物', 'Không có', '无'),
+      isoPf_('Dao (nếu có)', '刀片（如有）', 'Đủ, không mẻ', '齐全、无崩口', false),
+      isoPf_('Băng tải, dây đai', '输送带、皮带', 'Không rách, lệch', '无撕裂、跑偏', false),
+      isoPf_('Hút bụi, hút giấy vụn', '吸尘、废纸抽吸', 'Hoạt động', '运行正常', false)
+    ] },
+  { key: 'BM-CĐ-07-01', form_code: 'BM-CĐ-07-01', frequency: 'SHIFT',
+    name_vi: 'Nhật ký vận hành trạm biến áp & tủ điện tổng (MSB)', name_zh: '变电站及总配电柜运行记录',
+    note_vi: 'Không mở cửa tủ trung thế đang mang điện để ghi số liệu. Chỉ số công tơ cuối ngày chuyển vào sổ công tơ; sự cố điện lập báo cáo sự cố.',
+    note_zh: '禁止为抄表打开带电的中压柜门。日末电表读数转入电表记录；电气故障填写故障报告。',
+    items: [
+      isoNum_('ELEC', 'Điện áp dây U12 / U23 / U31', '线电压U12/U23/U31', 'V', 'RANGE', 380, 420, { type: 'THREE_PHASE', imb: 3 }),
+      isoNum_('ELEC', 'Dòng điện I1 / I2 / I3', '电流I1/I2/I3', 'A', 'NONE', null, null, { type: 'THREE_PHASE', imb: 10 }),
+      isoNum_('ELEC', 'Công suất P', '有功功率P', 'kW', 'NONE', null, null, { stdVi: '—', stdZh: '—' }),
+      isoNum_('ELEC', 'Hệ số công suất cos φ', '功率因数cos φ', '', 'MIN', 0.9),
+      isoNum_('ELEC', 'Tụ bù: số cấp đang đóng', '电容投入级数', 'cấp', 'NONE', null, null, { stdVi: 'n / N cấp', stdZh: 'n/N级' }),
+      isoNum_('TEMP', 'Nhiệt độ MBA', '变压器温度', '°C', 'NONE'),
+      isoNum_('TEMP', 'Nhiệt độ phòng trạm', '配电房温度', '°C', 'MAX', null, 40),
+      isoNum_('OTHER', 'Công tơ cuối ca – bình thường', '班末电表–平段', 'kWh', 'NONE', null, null, { stdVi: '—', stdZh: '—' }),
+      isoNum_('OTHER', 'Công tơ cuối ca – cao điểm', '班末电表–峰段', 'kWh', 'NONE', null, null, { stdVi: '—', stdZh: '—' }),
+      isoNum_('OTHER', 'Công tơ cuối ca – thấp điểm', '班末电表–谷段', 'kWh', 'NONE', null, null, { stdVi: '—', stdZh: '—' }),
+      isoNum_('OTHER', 'Công tơ cuối ca – vô công', '班末电表–无功', 'kVArh', 'NONE', null, null, { stdVi: '—', stdZh: '—', req: false }),
+      isoPf_('MBA', '变压器', 'Mức dầu trong vạch, hạt hút ẩm chưa đổi màu quá 2/3, không rò dầu, không tiếng kêu – mùi lạ (MBA khô: quạt, bộ điều khiển nhiệt hoạt động)',
+        '油位在刻度内，吸湿剂变色未超过2/3，无渗油、无异响异味（干式变：风机、温控器正常）'),
+      isoPf_('Tủ MSB', '总配电柜', 'ACB / MCCB tổng đúng trạng thái, đèn báo – đồng hồ bình thường, không mùi khét, không tiếng phóng điện', '总断路器状态正确，指示灯及仪表正常，无焦味、无放电声'),
+      isoPf_('Tụ bù', '电容补偿柜', 'Bộ điều khiển hoạt động, tụ không phồng – nóng bất thường, quạt tủ chạy', '控制器正常，电容无鼓胀、无异常发热，柜内风扇运转'),
+      isoPf_('Thanh cái, đầu cốt', '母排、端子', 'Không đổi màu, không nóng bất thường (quan sát qua kính / súng đo nhiệt)', '无变色、无异常发热（观察窗/测温枪）'),
+      isoPf_('Phòng trạm', '配电房', 'Thông gió – điều hòa hoạt động, không dột – đọng nước, không côn trùng – chuột, cửa khóa', '通风/空调正常，无漏水积水，无虫鼠，门已上锁'),
+      isoPf_('Dụng cụ an toàn điện & PCCC', '电气安全工器具及消防', 'Thảm, găng, ủng cách điện, sào thao tác, biển báo, bình CO₂ sẵn sàng', '绝缘垫、手套、绝缘靴、操作杆、警示牌、CO₂灭火器齐备')
+    ] },
+  { key: 'BM-CĐ-07-02', form_code: 'BM-CĐ-07-02', frequency: 'SHIFT',
+    name_vi: 'Nhật ký vận hành máy nén khí & máy sấy khí', name_zh: '空压机及干燥机运行记录',
+    note_vi: 'Gán cho từng máy nén. Hạng mục máy sấy không bắt buộc (máy nén không kèm máy sấy bỏ trống). Giờ chạy tích lũy dùng lên lịch bảo dưỡng ở M&E.',
+    note_zh: '分配给每台空压机。干燥机项目非必填（无干燥机时留空）。累计运行小时用于在M&E安排保养。',
+    items: [
+      { group_key: 'OTHER', name_vi: 'Trạng thái máy', name_zh: '运行状态', input_type: 'CHOICE', std_type: 'NONE', required: true,
+        choices_json: [{ code: 'LOAD', vi: '● Chạy có tải', zh: '● 加载运行', result: 'OK' }, { code: 'UNLOAD', vi: '○ Chạy không tải', zh: '○ 卸载运行', result: 'OK' },
+          { code: 'STOP', vi: '✕ Dừng / dự phòng', zh: '✕ 停机/备用', result: 'OK' }] },
+      isoNum_('PRESS', 'Áp suất xả', '排气压力', 'bar', 'NONE'),
+      isoNum_('TEMP', 'Nhiệt độ xả / nhiệt độ dầu', '排气/油温度', '°C', 'RANGE', 70, 100),
+      isoNum_('TEMP', 'Máy sấy: điểm sương áp suất (PDP)', '干燥机：压力露点（PDP）', '°C', 'MAX', null, 10, ISO_OPT_),
+      isoNum_('PRESS', 'Máy sấy: chênh áp lọc ΔP', '干燥机：过滤器压差ΔP', 'bar', 'MAX', null, 0.35, ISO_OPT_),
+      isoNum_('PRESS', 'Áp suất ống chính', '主管压力', 'bar', 'NONE'),
+      isoNum_('TEMP', 'Nhiệt độ phòng máy', '机房温度', '°C', 'MAX', null, 40),
+      isoNum_('OTHER', 'Giờ chạy tổng', '累计运行小时', 'h', 'NONE', null, null, { stdVi: '—', stdZh: '—', req: false }),
+      isoNum_('OTHER', 'Giờ có tải', '累计加载小时', 'h', 'NONE', null, null, { stdVi: '—', stdZh: '—', req: false }),
+      isoPf_('Xả nước ngưng', '排冷凝水', 'Đã xả bình chứa, lọc, máy sấy; van xả tự động hoạt động', '已排储气罐、过滤器、干燥机冷凝水；自动排水阀正常'),
+      isoPf_('Mức dầu, rò rỉ', '油位、泄漏', 'Mức dầu trong vạch; không rò rỉ dầu – khí', '油位在刻度内；无漏油、漏气'),
+      isoPf_('Tiếng ồn, rung, bộ điều khiển', '噪声、振动、控制器', 'Không ồn – rung bất thường; không báo lỗi', '无异常噪声、振动；控制器无报警'),
+      isoPf_('Phòng máy', '机房', 'Thông gió – hút nhiệt hoạt động, lưới lọc cửa gió sạch', '通风排热正常，进风口滤网清洁'),
+      isoPf_('Bình chứa khí', '储气罐', 'Van an toàn, áp kế bình thường, còn hạn kiểm định', '安全阀、压力表正常，在检验有效期内')
+    ] },
+  { key: 'BM-CĐ-07-03', form_code: 'BM-CĐ-07-03', frequency: 'MONTH',
+    name_vi: 'Kiểm tra chất lượng khí nén tại điểm sử dụng', name_zh: '用气点压缩空气质量检查',
+    note_vi: 'TT = thổi trực tiếp lên sản phẩm (cấp 2:2:1); GT = gián tiếp (cấp 2:4:2) theo ISO 8573-1. Không đạt: thay lõi lọc, kiểm tra máy sấy, báo QA. Sửa danh sách điểm cho đúng nhà máy.',
+    note_zh: 'TT=直接吹向产品（2:2:1级）；GT=间接（2:4:2级），依据ISO 8573-1。不合格：更换滤芯、检查干燥机、通知品保。请按工厂实际修改用气点。',
+    items: [
+      ['Máy in offset – bộ cấp giấy (thổi tách tờ)', '胶印机–飞达（分纸吹气）', 1], ['Máy in offset – bộ ra giấy (thổi đỡ tờ)', '胶印机–收纸（吹气托纸）', 1],
+      ['Máy phủ UV – thổi bụi bề mặt tờ in', 'UV上光机–印张表面吹尘', 1], ['Máy cán màng – thổi tách, làm sạch', '覆膜机–分纸、清洁吹气', 1],
+      ['Máy bế – thổi phế liệu, tách sản phẩm', '模切机–吹废料、分离成品', 1], ['Máy dán hộp – thổi định vị hộp', '糊盒机–定位吹气', 1],
+      ['Máy ép nhũ – thổi tách giấy', '烫金机–分纸吹气', 1], ['Súng thổi vệ sinh dùng chung', '公用清洁吹枪', 0],
+      ['Xi lanh, van khí nén (không tiếp xúc sản phẩm)', '气缸、气阀（不接触产品）', 0], ['Sau máy sấy trung tâm (điểm đối chứng)', '中央干燥机出口（对照点）', 0]
+    ].map(function (p) {
+      return isoPf_(p[0], p[1], p[2] ? 'TT: điểm sương ≤ −40 °C, dầu ≤ 0,01 mg/m³; giấy trắng thổi 30 giây không vết nước, dầu; lọc tại điểm tốt'
+        : 'GT: điểm sương ≤ +3 °C, dầu ≤ 0,1 mg/m³; giấy trắng không vết nước, dầu; lọc tại điểm tốt',
+        p[2] ? 'TT：露点≤−40℃，含油≤0.01mg/m³；白纸吹30秒无水油痕；终端过滤器正常' : 'GT：露点≤+3℃，含油≤0.1mg/m³；白纸无水油痕；终端过滤器正常', false);
+    }).concat([isoNum_('TEMP', 'Điểm sương sau máy sấy trung tâm', '中央干燥机出口露点', '°C', 'MAX', null, 3, ISO_OPT_)]) },
+  { key: 'BM-CĐ-07-04', form_code: 'BM-CĐ-07-04', frequency: 'SHIFT',
+    name_vi: 'Nhật ký vận hành chiller, tháp giải nhiệt & AHU', name_zh: '冷水机组、冷却塔及空调箱运行记录',
+    note_vi: 'Gán cho từng chiller (phần tháp và AHU không bắt buộc nếu theo dõi riêng). Nhiệt độ – độ ẩm phòng so với giới hạn QA.',
+    note_zh: '分配给每台冷水机组（冷却塔、空调箱部分单独记录时非必填）。室内温湿度对照品保限值。',
+    items: [
+      isoNum_('TEMP', 'Nước lạnh cấp', '冷冻水供水', '°C', 'RANGE', 6, 8),
+      isoNum_('TEMP', 'Nước lạnh hồi', '冷冻水回水', '°C', 'RANGE', 10, 13),
+      isoNum_('TEMP', 'Nước giải nhiệt vào', '冷却水进水', '°C', 'MAX', null, 32),
+      isoNum_('TEMP', 'Nước giải nhiệt ra', '冷却水出水', '°C', 'MAX', null, 37),
+      isoNum_('PRESS', 'Áp suất môi chất – ngưng tụ', '冷媒压力–冷凝', 'bar', 'NONE'),
+      isoNum_('PRESS', 'Áp suất môi chất – bay hơi', '冷媒压力–蒸发', 'bar', 'NONE'),
+      isoNum_('ELEC', 'Dòng điện chiller', '冷水机组电流', 'A', 'NONE'),
+      isoPf_('Tháp: mực nước – phao', '冷却塔：水位–浮球阀', 'Đúng mức, phao hoạt động', '水位正常、浮球阀正常', false),
+      isoNum_('QUALITY', 'Tháp: độ dẫn điện', '冷却塔：电导率', 'µS/cm', 'NONE', null, null, ISO_OPT_),
+      isoNum_('QUALITY', 'Tháp: pH', '冷却塔：pH值', '', 'NONE', null, null, ISO_OPT_),
+      isoPf_('Tháp: hóa chất', '冷却塔：药剂', 'Mức bồn đủ, bơm định lượng hoạt động', '药箱液位足、计量泵正常', false),
+      isoPf_('Tháp: xả đáy', '冷却塔：排污', 'Đã xả', '已排污', false),
+      isoPf_('Tháp: lưới lọc, rong rêu, cặn', '冷却塔：滤网、藻类、水垢', 'Sạch', '清洁', false),
+      isoNum_('TEMP', 'AHU: nhiệt độ phòng', '空调箱：室内温度', '°C', 'NONE', null, null, ISO_OPT_),
+      isoNum_('QUALITY', 'AHU: độ ẩm phòng', '空调箱：室内湿度', '%RH', 'NONE', null, null, ISO_OPT_),
+      isoNum_('PRESS', 'AHU: chênh áp lọc', '空调箱：过滤器压差', 'Pa', 'NONE', null, null, ISO_OPT_),
+      isoPf_('AHU: quạt – dây đai – xả nước ngưng', '空调箱：风机–皮带–冷凝水排放', 'Hoạt động tốt', '运行正常', false)
+    ] },
+  { key: 'BM-CĐ-07-06-KT', form_code: 'BM-CĐ-07-06', frequency: 'WEEK',
+    name_vi: 'Máy phát dự phòng – chạy thử không tải (hằng tuần)', name_zh: '备用发电机–空载试机（每周）',
+    note_vi: 'KT: chạy không tải hằng tuần. Thử có tải và chuyển nguồn ATS dùng mẫu hằng tháng.', note_zh: 'KT：每周空载试机。带载及ATS切换测试使用每月模板。',
+    items: isoGenItems_(false) },
+  { key: 'BM-CĐ-07-06-CT', form_code: 'BM-CĐ-07-06', frequency: 'MONTH',
+    name_vi: 'Máy phát dự phòng – chạy có tải, thử ATS (hằng tháng)', name_zh: '备用发电机–带载试机及ATS测试（每月）',
+    note_vi: 'CT: chạy có tải và thử chuyển nguồn ATS hằng tháng.', note_zh: 'CT：每月带载试机及ATS切换测试。',
+    items: isoGenItems_(true) },
+  { key: 'BM-CĐ-07-07a', form_code: 'BM-CĐ-07-07', frequency: 'SHIFT',
+    name_vi: 'Nhật ký vận hành nồi hơi', name_zh: '锅炉运行记录',
+    note_vi: 'Lò phải còn hạn kiểm định; người vận hành được huấn luyện. Mực nước, áp suất vượt giới hạn hoặc van an toàn, áp kế hư: dừng lò theo quy trình, báo ngay Tổ trưởng CĐ.',
+    note_zh: '锅炉须在检验有效期内；司炉工须经培训。水位、压力超限或安全阀、压力表损坏：按规程停炉并立即报告机电组长。',
+    items: [
+      isoNum_('PRESS', 'Áp suất hơi', '蒸汽压力', 'bar', 'NONE'),
+      isoPf_('Mực nước', '水位', 'Trong vạch Min – Max', '在Min–Max之间'),
+      isoNum_('TEMP', 'Nhiệt độ nước cấp', '给水温度', '°C', 'NONE'),
+      isoNum_('TEMP', 'Nhiệt độ khói', '排烟温度', '°C', 'NONE'),
+      isoPf_('Ngọn lửa, buồng đốt', '火焰、炉膛', 'Ổn định, bình thường', '稳定、正常'),
+      isoNum_('OTHER', 'Đồng hồ nước cấp', '给水表读数', 'm³', 'NONE', null, null, { stdVi: '—', stdZh: '—', req: false }),
+      isoNum_('OTHER', 'Nhiên liệu tiêu thụ', '燃料消耗', '', 'NONE', null, null, { stdVi: 'L · m³ · kg', stdZh: 'L·m³·kg', req: false }),
+      isoPf_('Ống thủy', '水位计', 'Đã thông rửa; 2 ống thủy cùng mức', '已冲洗；两只水位计液位一致'),
+      isoPf_('Áp kế', '压力表', 'Kiểm tra bằng van 3 ngả; còn hạn kiểm định', '用三通阀校对；在检定有效期内'),
+      isoNum_('OTHER', 'Xả đáy theo quy trình (số lần)', '按规程排污（次数）', 'lần', 'MIN', 1),
+      isoPf_('Rơ le mức nước', '水位控制', 'Bơm tự động đóng – ngắt; báo động, ngắt lò khi mức thấp', '给水泵自动启停；低水位报警及联锁停炉'),
+      isoPf_('Van an toàn', '安全阀', 'Không rò; thử nâng tay theo quy trình', '无泄漏；按规程手动提升试验'),
+      isoPf_('Đường ống hơi – nước – nhiên liệu', '蒸汽、水、燃料管道', 'Không rò rỉ; bảo ôn nguyên vẹn', '无泄漏；保温完好'),
+      isoPf_('Hóa chất xử lý nước lò', '锅炉水处理药剂', 'Mức bồn đủ, bơm định lượng hoạt động', '药箱液位足、计量泵正常'),
+      isoNum_('QUALITY', 'Độ cứng nước cấp / TDS nước lò', '给水硬度/炉水TDS', 'mg/L', 'NONE')
+    ] },
+  { key: 'BM-CĐ-07-07b', form_code: 'BM-CĐ-07-07', frequency: 'SHIFT',
+    name_vi: 'Nhật ký vận hành lò dầu tải nhiệt', name_zh: '导热油炉运行记录',
+    note_vi: 'Nhiệt độ dầu ra không vượt nhiệt độ làm việc tối đa của loại dầu; dừng đầu đốt trước, chạy bơm tuần hoàn đến khi dầu nguội.',
+    note_zh: '出油温度不得超过该导热油的最高使用温度；停炉时先停燃烧器，循环泵运行至油温降低。',
+    items: [
+      isoNum_('TEMP', 'Nhiệt độ dầu ra', '出油温度', '°C', 'NONE'),
+      isoNum_('TEMP', 'Nhiệt độ dầu về', '回油温度', '°C', 'NONE'),
+      isoNum_('PRESS', 'Áp suất dầu ra', '出油压力', 'bar', 'NONE'),
+      isoNum_('PRESS', 'Áp suất dầu về', '回油压力', 'bar', 'NONE'),
+      isoNum_('TEMP', 'Nhiệt độ khói', '排烟温度', '°C', 'NONE'),
+      isoPf_('Mức dầu bình giãn nở', '膨胀槽油位', 'Trong vạch Min – Max', '在Min–Max之间'),
+      isoNum_('TEMP', 'Nhiệt độ bình giãn nở', '膨胀槽温度', '°C', 'NONE'),
+      isoNum_('OTHER', 'Nhiên liệu tiêu thụ', '燃料消耗', '', 'NONE', null, null, { stdVi: 'L · m³ · kg', stdZh: 'L·m³·kg', req: false }),
+      isoPf_('Bơm dầu tuần hoàn (chính / dự phòng)', '循环油泵（主/备）', 'Không ồn, rung bất thường; không rò phớt', '无异常噪声、振动；机封无泄漏'),
+      isoPf_('Đường ống, mặt bích, van dầu', '油管、法兰、阀门', 'Không rò rỉ; bảo ôn nguyên vẹn', '无泄漏；保温完好'),
+      isoPf_('Bình giãn nở, bình xả dầu', '膨胀槽、储油槽', 'Mức dầu, van, ống thở bình thường', '油位、阀门、呼吸管正常'),
+      isoPf_('Đầu đốt – buồng đốt', '燃烧器–炉膛', 'Ngọn lửa ổn định, khói thải bình thường', '火焰稳定，排烟正常'),
+      isoPf_('Bảo vệ', '保护', 'Lưu lượng / chênh áp dầu, quá nhiệt, mức dầu thấp – đèn báo, liên động hoạt động', '油流量/压差、超温、低油位–指示及联锁正常'),
+      isoPf_('Áp kế, nhiệt kế, van an toàn', '压力表、温度计、安全阀', 'Hoạt động, còn hạn kiểm định', '正常，在检定有效期内'),
+      isoPf_('Khu lò', '炉区', 'Bình chữa cháy, cát đủ; không vật dễ cháy, không dầu rò xuống sàn', '灭火器、沙箱齐备；无易燃物，地面无漏油')
+    ] },
+  { key: 'BM-CĐ-07-10', form_code: 'BM-CĐ-07-10', frequency: 'DAY',
+    name_vi: 'Nhật ký vận hành hệ thống cấp nước & xử lý nước cấp', name_zh: '供水及给水处理系统运行记录',
+    note_vi: 'Ghi mỗi ngày vào giờ cố định. Hạng mục của hệ thống không có thì bỏ trống. Vượt giới hạn: hoàn nguyên, xả đáy hoặc chỉnh bơm hóa chất.',
+    note_zh: '每日固定时间记录。无该系统的项目留空。超限：再生、排污或调整加药泵。',
+    items: [
+      isoNum_('OTHER', 'Đồng hồ nước cấp tổng', '总供水表读数', 'm³', 'NONE', null, null, { stdVi: '—', stdZh: '—' }),
+      isoNum_('OTHER', 'Lưu lượng tức thời Q', '瞬时流量Q', 'm³/h', 'NONE', null, null, ISO_OPT_),
+      isoNum_('PRESS', 'Áp suất cấp P', '供水压力P', 'bar', 'NONE'),
+      isoNum_('QUALITY', 'Độ cứng nước mềm cấp lò hơi', '锅炉软化水硬度', 'mg/L', 'NONE', null, null, ISO_OPT_),
+      isoNum_('QUALITY', 'TDS nước RO cấp tạo ẩm', '加湿RO水TDS', 'mg/L', 'NONE', null, null, ISO_OPT_),
+      isoNum_('QUALITY', 'Độ dẫn điện nước tháp giải nhiệt', '冷却塔水电导率', 'µS/cm', 'NONE', null, null, ISO_OPT_),
+      isoNum_('OTHER', 'Hóa chất châm', '加药量', 'L', 'NONE', null, null, { stdVi: '—', stdZh: '—', req: false }),
+      isoPf_('Rửa lọc', '反洗', 'Đã rửa theo chu kỳ', '按周期反洗', false),
+      isoPf_('Hoàn nguyên bộ làm mềm', '软化器再生', 'Đã hoàn nguyên theo chu kỳ', '按周期再生', false),
+      isoNum_('OTHER', 'Muối hoàn nguyên', '再生用盐', 'kg', 'NONE', null, null, { stdVi: '—', stdZh: '—', req: false })
+    ] },
+  { key: 'BM-CĐ-07-11', form_code: 'BM-CĐ-07-11', frequency: 'MONTH',
+    name_vi: 'Kiểm tra hệ thống thông gió & hút bụi giấy', name_zh: '通风及纸尘收集系统检查',
+    note_vi: 'Gán cho từng hệ thống / quạt. Lưu lượng, áp suất giảm > 20 % so với thiết kế / lần trước: kiểm tra tắc ống, túi lọc, dây đai. Không đạt: lập phiếu sửa chữa.',
+    note_zh: '分配给每个系统/风机。风量、压力较设计/上次下降>20%：检查风管堵塞、滤袋、皮带。不合格：开具维修单。',
+    items: [
+      isoNum_('OTHER', 'Lưu lượng', '风量', 'm³/h', 'NONE', null, null, ISO_OPT_),
+      isoNum_('PRESS', 'Áp suất quạt', '风机压力', 'Pa', 'NONE', null, null, ISO_OPT_),
+      isoNum_('ELEC', 'Dòng điện quạt', '风机电流', 'A', 'NONE'),
+      isoNum_('PRESS', 'Chênh áp túi lọc ΔP', '滤袋压差ΔP', 'Pa', 'NONE', null, null, ISO_OPT_),
+      isoNum_('OTHER', 'Độ ồn', '噪声', 'dB(A)', 'NONE', null, null, ISO_OPT_),
+      isoPf_('Đường ống, chụp hút, cửa hút', '风管、吸罩、吸口', 'Không thủng, móp, hở mối nối', '无破损、变形、接口泄漏'),
+      isoPf_('Bụi giấy tích tụ trong ống, chụp hút, dầm – máng cáp quanh máy', '风管、吸罩及周边梁、桥架积尘', 'Đã vệ sinh, không còn lớp bụi dày (nguy cơ cháy)', '已清理，无厚积尘（火灾隐患）'),
+      isoPf_('Túi lọc / lõi lọc, cơ cấu rũ bụi', '滤袋/滤芯、清灰装置', 'Không rách; rũ bụi hoạt động', '无破损；清灰正常', false),
+      isoPf_('Thùng / bao chứa bụi, cyclone', '集尘桶/袋、旋风分离器', 'Không đầy quá mức; đổ đúng nơi quy định', '未过满；按规定处置', false),
+      isoPf_('Quạt: dây đai, vòng bi, rung, bu lông chân đế', '风机：皮带、轴承、振动、地脚螺栓', 'Dây đai đủ căng, không mòn; vòng bi không kêu, không nóng', '皮带张紧无磨损；轴承无异响、无过热'),
+      isoPf_('Nối đất chống tĩnh điện', '防静电接地', 'Dây nối liên tục, chắc chắn', '跨接线连续、牢固'),
+      isoPf_('Van chặn lửa, van một chiều, cửa xả áp nổ', '防火阀、止回阀、泄爆口', 'Hoạt động, không kẹt, không bị che chắn', '动作正常、无卡阻、无遮挡', false),
+      isoPf_('Liên động quạt – máy sản xuất; lưới bảo vệ cánh quạt', '风机与生产设备联锁；叶轮防护网', 'Liên động đúng; lưới bảo vệ đủ', '联锁正常；防护网齐全')
+    ] },
+  { key: 'BM-CĐ-08-12', form_code: 'BM-CĐ-08-12', frequency: 'WEEK',
+    name_vi: 'Kiểm soát thông số vận hành SEU', name_zh: 'SEU运行参数控制',
+    note_vi: 'Giá trị chuẩn đặt theo tiêu chuẩn công ty / danh mục SEU (BM-CĐ-08-04). Không đạt ảnh hưởng EnPI: lập phiếu điều tra sai lệch; cần sửa: lập phiếu sửa chữa.',
+    note_zh: '标准值按公司标准/SEU清单（BM-CĐ-08-04）设定。不合格影响EnPI：填写偏差调查单；需维修：开具维修单。',
+    items: [
+      isoNum_('PRESS', 'Khí nén: áp suất đặt máy nén (cắt tải)', '空压机设定压力（卸载）', 'bar', 'NONE'),
+      isoNum_('PRESS', 'Khí nén: áp suất điểm dùng xa nhất', '最远用气点压力', 'bar', 'NONE'),
+      isoNum_('TEMP', 'Khí nén: điểm sương máy sấy', '干燥机压力露点', '°C', 'NONE'),
+      isoNum_('OTHER', 'Khí nén: tỷ lệ chạy không tải', '空压机空载率', '%', 'NONE'),
+      isoPf_('Khí nén: van xả nước ngưng tự động', '自动排水阀', 'Hoạt động đúng chu kỳ', '按周期动作'),
+      isoPf_('Khí nén: khóa van khí khu vực không sản xuất', '非生产区域供气阀', 'Đã khóa', '已关闭'),
+      isoNum_('TEMP', 'Chiller: nhiệt độ đặt nước lạnh cấp', '冷冻水供水设定温度', '°C', 'NONE', null, null, ISO_OPT_),
+      isoNum_('TEMP', 'Chiller: ΔT nước lạnh cấp – hồi', '冷冻水供回水温差ΔT', '°C', 'NONE', null, null, ISO_OPT_),
+      isoPf_('Nhiệt độ – độ ẩm xưởng in, kho giấy', '印刷车间、纸库温湿度', 'Trong giới hạn QA', '在品保限值内', false),
+      isoNum_('TEMP', 'Nhiệt độ nước giải nhiệt vào bình ngưng', '冷却水进冷凝器温度', '°C', 'NONE', null, null, ISO_OPT_),
+      isoPf_('Lịch bật / tắt AHU, điều hòa văn phòng', '空调箱、办公空调开关时间', 'Đúng lịch', '符合时间表', false),
+      isoPf_('Cửa khu điều hòa đóng kín; rèm gió chạy', '空调区门关闭严密；风幕机运行', 'Đóng kín', '关闭严密', false),
+      isoPf_('Lịch bật / tắt đèn xưởng, kho, sân', '车间、仓库、室外照明开关时间', 'Đúng lịch / cài đặt', '符合时间表/设定'),
+      isoPf_('Tắt đèn khu không người, đủ sáng', '无人区及自然光充足区关灯', 'Không vi phạm', '无违规'),
+      isoPf_('Máy in: tắt sấy IR/UV, bơm khi chờ', '印刷机：待机关闭IR/UV干燥及泵', 'Chờ quá thời gian quy định: tắt', '待机超过规定时间：关闭'),
+      isoPf_('Bế, dán, cán màng, ép nhũ: tắt khi chờ', '模切、糊盒、覆膜、烫金：待机关闭', 'Theo quy định', '按规定'),
+      isoPf_('Hút bụi, quạt hút chạy theo máy chính', '纸尘收集、排风机随主机运行', 'Liên động', '联锁'),
+      isoPf_('Lò hơi / lò dầu: áp suất, nhiệt độ đặt', '锅炉/导热油炉设定压力、温度', 'Đúng giá trị chuẩn', '符合标准值', false),
+      isoNum_('TEMP', 'Lò hơi / lò dầu: nhiệt độ khói thải', '锅炉/导热油炉排烟温度', '°C', 'NONE', null, null, ISO_OPT_),
+      isoPf_('Bảo ôn ống, van; không rò hơi / dầu', '管道阀门保温；无蒸汽/油泄漏', 'Không rò', '无泄漏', false),
+      isoNum_('ELEC', 'Hệ số công suất cos φ tại tủ tổng', '总配电柜功率因数cos φ', '', 'MIN', 0.9),
+      isoPf_('Tụ bù đóng đủ cấp, không quá nhiệt', '电容补偿投切正常、无过热', 'Đủ cấp, không nóng', '投切正常、无过热')
+    ] },
+  { key: 'BM-CĐ-09-10', form_code: 'BM-CĐ-09-10', frequency: 'MONTH',
+    name_vi: 'Kiểm tra dụng cụ điện cầm tay, dây nối, ổ cắm di động', name_zh: '手持电动工具、延长线、移动插座检查',
+    note_vi: 'Gán cho từng dụng cụ hoặc nhóm dụng cụ (khai trong M&E). Không đạt: dán tem đỏ "Không sử dụng", thu hồi sửa hoặc loại bỏ; ghi mã dụng cụ lỗi ở ghi chú.',
+    note_zh: '分配给每件工具或工具组（在M&E登记）。不合格：贴红色“禁止使用”标签，收回维修或报废；在备注中记录不合格工具编号。',
+    items: [
+      isoPf_('A. Vỏ', 'A. 外壳', 'Không nứt vỡ, đủ vít, không biến dạng, cháy xém', '无裂损、螺钉齐全、无变形、无烧焦'),
+      isoPf_('B. Dây dẫn', 'B. 导线', 'Không hở lõi, không dập, không nối bằng băng dính; giữ cáp đầu vào chắc', '无露芯、无压伤、无胶布接头；进线电缆固定牢靠'),
+      isoPf_('C. Phích cắm, ổ cắm', 'C. 插头、插座', 'Chân cắm không cong, không cháy; đúng loại; ổ cắm không lỏng, không nứt', '插脚无弯曲、无烧痕；规格匹配；插座无松动、无裂纹'),
+      isoPf_('D. Tiếp địa / cách điện kép', 'D. 接地/双重绝缘', 'Dây tiếp địa liên tục (cấp I) hoặc có ký hiệu cách điện kép (cấp II)', '接地线连续（I类）或有双重绝缘标志（II类）'),
+      isoNum_('ELEC', 'E. Điện trở cách điện (500 V DC)', 'E. 绝缘电阻（500V DC）', 'MΩ', 'NONE'),
+      isoPf_('F. RCD (chống dòng rò)', 'F. 漏电保护器', 'Nhấn TEST – RCD cắt; dòng tác động ≤ 30 mA', '按TEST能跳闸；额定动作电流≤30mA', false),
+      isoPf_('G. Công tắc, che chắn', 'G. 开关、防护罩', 'Bật – tắt tốt, không kẹt; đủ chắn bảo vệ; chổi than không đánh lửa mạnh', '开关通断正常、无卡滞；防护罩齐全；碳刷无强烈火花'),
+      isoText_('Màu tem tháng này', '本月标签颜色')
+    ] },
+  { key: 'BM-CĐ-09-11', form_code: 'BM-CĐ-09-11', frequency: 'SHIFT',
+    name_vi: 'Kiểm tra xe nâng / thiết bị nâng trước khi sử dụng', name_zh: '叉车/起重设备使用前检查',
+    note_vi: 'Không đạt: không sử dụng, báo ngay Tổ trưởng CĐ. Mục 7 cho xe dầu / gas, mục 8 cho xe điện.',
+    note_zh: '不合格：停止使用，立即报告机电组长。第7项适用于内燃叉车，第8项适用于电动叉车。',
+    items: [
+      isoPf_('Phanh chân, phanh tay', '脚刹、手刹', 'Ăn tốt, xe không trôi', '制动有效、无溜车'),
+      isoPf_('Còi, đèn chiếu sáng, đèn cảnh báo, còi lùi', '喇叭、照明灯、警示灯、倒车蜂鸣器', 'Hoạt động', '正常'),
+      isoPf_('Vô lăng, hệ thống lái', '方向盘/转向系统', 'Nhẹ, không rơ', '轻便、无松旷'),
+      isoPf_('Xích nâng, puli, khung nâng', '起升链条、链轮、门架', 'Không nứt, không giãn; đủ dầu mỡ', '无裂纹、无拉长；润滑良好'),
+      isoPf_('Càng nâng, chốt khóa càng', '货叉及定位销', 'Không nứt, không cong; đủ chốt', '无裂纹、无弯曲；销齐全'),
+      isoPf_('Xi lanh, ống dầu, gầm xe', '油缸、油管、车底', 'Không rò rỉ dầu, nhiên liệu', '无漏油、漏燃料'),
+      isoPf_('Dầu thủy lực, nhớt, nước làm mát (xe dầu / gas)', '液压油、机油、冷却液（内燃车）', 'Đủ mức', '液位正常', false),
+      isoPf_('Ắc quy, bộ sạc, dây sạc (xe điện)', '蓄电池、充电器、充电线（电动车）', 'Đủ điện, không rò axit, không hở', '电量足、无漏酸、无破损', false),
+      isoPf_('Lốp, bánh xe', '轮胎、车轮', 'Không mòn quá giới hạn, không nứt', '无超限磨损、无裂纹'),
+      isoPf_('Dây an toàn, khung bảo vệ đầu, tấm chắn tải', '安全带、护顶架、挡货架', 'Nguyên vẹn', '完好'),
+      isoPf_('Cần nâng – hạ – nghiêng', '起升/下降/倾斜操纵杆', 'Hoạt động êm, đúng chiều', '动作平顺、方向正确'),
+      isoPf_('Gương, biển tải trọng, bình chữa cháy trên xe, tem kiểm định', '后视镜、载荷铭牌、车载灭火器、检验标签', 'Đủ; tem kiểm định còn hạn', '齐全；检验标签有效')
+    ] },
+  { key: 'BM-CĐ-09-12', form_code: 'BM-CĐ-09-12', frequency: 'MONTH',
+    name_vi: 'Kiểm tra an toàn định kỳ khu vực kỹ thuật', name_zh: '技术区域定期安全检查',
+    note_vi: 'Gán cho từng khu (trạm biến áp, phòng tủ điện, phòng máy nén, phòng bơm, phòng chiller, phòng máy phát, khu sạc xe nâng, mái). Mục không có ở khu thì bỏ trống.',
+    note_zh: '分配给每个区域（变电站、配电室、空压机房、泵房、冷水机房、发电机房、叉车充电区、屋面）。区域内无此项目留空。',
+    items: [
+      isoPf_('Biển cảnh báo, sơ đồ hệ thống, nội quy', '警示标识、系统图、操作规程', 'Đủ, rõ, không bong', '齐全、清晰、无脱落'),
+      isoPf_('Cửa, khóa', '门锁', 'Đóng, có khóa; chỉ người được giao giữ chìa', '关闭上锁；仅授权人员持钥匙'),
+      isoPf_('Lối đi, lối thoát', '通道、出口', 'Thông thoáng, không để vật tư; đèn EXIT sáng', '畅通无堆物；出口指示灯正常'),
+      isoPf_('Chiếu sáng thường và đèn sự cố', '正常照明及应急照明', 'Hoạt động tốt', '工作正常'),
+      isoPf_('Che chắn dây đai, khớp nối, quạt, phần mang điện', '皮带、联轴器、风扇、带电部位防护', 'Đầy đủ', '齐全', false),
+      isoPf_('Tủ điện', '电柜', 'Cửa đóng, không quá nhiệt, mùi khét; cáp không hở', '柜门关闭，无过热、焦味；电缆无裸露', false),
+      isoPf_('Thảm cách điện, dây tiếp địa vỏ thiết bị', '绝缘垫、设备外壳接地线', 'Có thảm trước tủ; tiếp địa bắt chắc', '柜前铺绝缘垫；接地线紧固', false),
+      isoPf_('Rò rỉ dầu, nước, khí nén, môi chất lạnh, axit', '漏油、漏水、漏气、冷媒及酸液', 'Không rò rỉ', '无泄漏'),
+      isoPf_('Vệ sinh', '清洁', 'Sạch; không bụi giấy, giẻ dầu, vật liệu dễ cháy', '清洁；无纸尘、油抹布、易燃物'),
+      isoPf_('Thông gió, quạt hút, điều hòa phòng', '通风、排风扇、空调', 'Hoạt động; nhiệt độ đạt', '运行正常；温度符合要求', false),
+      isoPf_('Van an toàn, đồng hồ áp, bình chịu áp lực', '安全阀、压力表、压力容器', 'Còn hạn kiểm định', '在检验有效期内', false),
+      isoPf_('Bình chữa cháy', '灭火器', 'Đủ, đúng chỗ, kim ở vùng xanh, có tem kiểm tra', '数量足、位置对、压力在绿区、有检查标签'),
+      isoPf_('Dụng cụ an toàn điện', '电气安全工器具', 'Đủ, còn hạn thử nghiệm', '齐全、在试验有效期内', false),
+      isoPf_('Hóa chất, ắc quy', '化学品、蓄电池', 'Có SDS, khay chống tràn, nơi rửa mắt', '有SDS、防泄漏托盘、洗眼器', false),
+      isoPf_('Lan can, thang leo, điểm neo, lối đi trên mái', '护栏、爬梯、锚固点、屋面走道', 'Nguyên vẹn', '完好', false),
+      isoPf_('Chuột, chim, côn trùng', '鼠、鸟、虫', 'Không có dấu hiệu; lỗ hở đã bịt kín', '无迹象；孔洞已封堵')
+    ] },
+  { key: 'BM-CĐ-10-02', form_code: 'BM-CĐ-10-02', frequency: 'MONTH',
+    name_vi: 'Kiểm tra bình chữa cháy hằng tháng', name_zh: '灭火器每月检查',
+    note_vi: 'Gán cho từng khu (mỗi khu một thiết bị nhóm "Bình chữa cháy khu …" trong M&E). Bình không đạt: ghi mã vị trí ở ghi chú, lập phiếu sửa chữa; bình đi nạp phải có bình thay thế tạm.',
+    note_zh: '分配给每个区域（在M&E中每区登记一个“…区灭火器”设备组）。不合格灭火器：在备注中记录位置编号并开具维修单；送充装须放置临时替换灭火器。',
+    items: [
+      isoNum_('OTHER', 'Số bình đã kiểm tra', '已检查灭火器数', 'bình', 'NONE', null, null, { stdVi: 'Đủ số bình của khu', stdZh: '本区全部灭火器' }),
+      isoNum_('OTHER', 'Số bình không đạt', '不合格灭火器数', 'bình', 'MAX', null, 0),
+      isoPf_('1. Áp suất', '1. 压力', 'Kim ở vùng xanh; bình CO₂ cân kiểm tra khối lượng', '指针在绿区；CO₂灭火器称重检查'),
+      isoPf_('2. Chốt an toàn, niêm phong', '2. 保险销、铅封', 'Còn nguyên', '完好'),
+      isoPf_('3. Vòi, loa phun', '3. 喷管、喷筒', 'Không nứt, gãy, tắc; lắp chắc chắn', '无裂纹、断裂、堵塞；连接牢固'),
+      isoPf_('4. Vỏ bình, nhãn', '4. 瓶体、标签', 'Không móp, gỉ, phồng; nhãn rõ; sạch bụi giấy', '无凹陷、锈蚀、鼓包；标签清晰；无纸尘'),
+      isoPf_('5. Vị trí', '5. 位置', 'Đúng vị trí trên sơ đồ; có giá / móc treo, biển báo', '与布置图一致；有支架/挂钩及标志'),
+      isoPf_('6. Lối tiếp cận', '6. 取用通道', 'Thông thoáng, không bị pallet, cuộn giấy che', '畅通，无托盘、纸卷遮挡'),
+      isoPf_('7. Hạn nạp lại, bảo dưỡng, kiểm định', '7. 再充装、保养、检验期限', 'Còn hạn (theo nhãn, tem)', '在有效期内（按标签）')
+    ] },
+  { key: 'BM-CĐ-10-03', form_code: 'BM-CĐ-10-03', frequency: 'WEEK',
+    name_vi: 'Chạy thử bơm chữa cháy & kiểm tra sprinkler, họng nước', name_zh: '消防泵试运行及喷淋、消火栓检查',
+    note_vi: 'Hạng mục "(hằng tháng)" làm ở tuần đầu tháng; hạng mục bơm diesel chỉ khi có. Giá trị chuẩn theo thiết kế / nhà sản xuất.',
+    note_zh: '“（每月）”项目在每月第一周执行；柴油泵项目仅在有柴油泵时填写。标准值按设计/厂家要求。',
+    items: [
+      isoPf_('Bơm điện: chế độ tủ điều khiển, đèn báo', '电动泵：控制柜模式、指示灯', 'AUTO, không báo lỗi', 'AUTO，无故障报警'),
+      isoPf_('Bơm điện: khởi động thử', '电动泵：试启动', 'Khởi động ngay, chạy êm', '立即启动，运行平稳'),
+      isoNum_('PRESS', 'Bơm điện: áp suất đầu đẩy khi chạy', '电动泵：运行出口压力', 'bar', 'NONE', null, null, { stdVi: '≥ theo thiết kế', stdZh: '≥设计值' }),
+      isoNum_('ELEC', 'Bơm điện: dòng điện khi chạy (pha lớn nhất)', '电动泵：运行电流（最大相）', 'A', 'NONE', null, null, { stdVi: '≤ định mức', stdZh: '≤额定值' }),
+      isoNum_('OTHER', 'Bơm điện: thời gian chạy thử', '电动泵：试运行时间', 'phút', 'NONE', null, null, { stdVi: '≥ quy định công ty', stdZh: '≥公司规定' }),
+      isoPf_('Bơm điện: rung, ồn, nhiệt độ ổ bi, rò rỉ phớt', '电动泵：振动、噪音、轴承温度、机封泄漏', 'Bình thường, không rò rỉ', '正常，无泄漏'),
+      isoNum_('LEVEL', 'Bơm diesel: mức nhiên liệu trong bồn', '柴油泵：油箱燃油液位', '%', 'NONE', null, null, ISO_OPT_),
+      isoNum_('ELEC', 'Bơm diesel: điện áp ắc quy khởi động', '柴油泵：启动蓄电池电压', 'V', 'NONE', null, null, ISO_OPT_),
+      isoPf_('Bơm diesel: dầu máy, nước làm mát, ống nhiên liệu', '柴油泵：机油、冷却液、燃油管', 'Đủ mức, không rò rỉ', '液位正常，无泄漏', false),
+      isoNum_('PRESS', 'Bơm diesel: áp suất đầu đẩy khi khởi động thử', '柴油泵：试启动出口压力', 'bar', 'NONE', null, null, ISO_OPT_),
+      isoNum_('OTHER', 'Bơm diesel: thời gian chạy thử', '柴油泵：试运行时间', 'phút', 'NONE', null, null, ISO_OPT_),
+      isoPf_('Bơm diesel: nhiệt độ nước, áp suất dầu khi chạy', '柴油泵：运行水温、机油压力', 'Trong dải nhà sản xuất', '在厂家规定范围内', false),
+      isoNum_('PRESS', 'Áp suất mạng ống khi chờ', '待机管网压力', 'bar', 'NONE', null, null, { stdVi: 'Trong dải cài đặt', stdZh: '在设定范围内' }),
+      isoPf_('Bơm bù áp tự chạy / tự dừng', '稳压泵自动启停', 'Đúng áp suất cài đặt', '符合设定压力'),
+      isoNum_('LEVEL', 'Mực nước bể chữa cháy', '消防水池水位', 'm', 'NONE', null, null, { stdVi: '≥ theo thiết kế', stdZh: '≥设计值' }),
+      isoPf_('Van chặn chính, van khu vực', '总控制阀、区域控制阀', 'Mở hết, có niêm phong', '全开，有铅封/锁'),
+      isoNum_('PRESS', 'Áp suất trước van báo động', '报警阀前压力', 'bar', 'NONE'),
+      isoNum_('PRESS', 'Áp suất sau van báo động', '报警阀后压力', 'bar', 'NONE'),
+      isoPf_('Van phao, đường cấp bù, nắp bể (hằng tháng)', '浮球阀、补水管、水池盖板（每月）', 'Hoạt động tốt, nắp kín', '工作正常，盖板严密', false),
+      isoPf_('Thử van báo động: chuông, tín hiệu về tủ (hằng tháng)', '报警阀测试：警铃、信号至主机（每月）', 'Chuông kêu, tủ báo đúng', '警铃响，主机报警正确', false),
+      isoPf_('Đầu phun sprinkler (hằng tháng)', '喷头（每月）', 'Không che chắn, bụi, sơn', '无遮挡、积尘、涂漆', false),
+      isoPf_('Tủ họng nước: vòi, lăng, khớp nối (hằng tháng)', '消火栓箱：水带、水枪、接口（每月）', 'Đủ, vòi không mục, thủng', '齐全，水带无老化、破洞', false),
+      isoPf_('Van họng, trụ ngoài nhà, họng tiếp nước (hằng tháng)', '消火栓阀、室外消火栓、水泵接合器（每月）', 'Kín, không bị che chắn', '无泄漏、无遮挡', false)
+    ] },
+  { key: 'BM-CĐ-10-04', form_code: 'BM-CĐ-10-04', frequency: 'MONTH',
+    name_vi: 'Kiểm tra, bảo dưỡng hệ thống báo cháy & đèn sự cố – chỉ dẫn thoát nạn', name_zh: '火灾报警系统及应急照明、疏散指示检查保养',
+    note_vi: 'Hạng mục "(quý)" chỉ làm ở kỳ kiểm tra quý (tháng 3, 6, 9, 12). Lỗi: ghi zone – địa chỉ – vị trí ở ghi chú, theo dõi khắc phục qua phiếu sửa chữa.',
+    note_zh: '“（季度）”项目仅在季度检查时执行（3、6、9、12月）。故障：在备注中记录回路–地址–位置，通过维修单跟踪整改。',
+    items: [
+      isoPf_('Tủ trung tâm: nguồn chính, đèn báo, màn hình', '报警主机：主电源、指示灯、显示屏', 'Không lỗi, không zone bị cô lập', '无故障、无屏蔽回路'),
+      isoPf_('Tủ trung tâm: ắc quy dự phòng (cắt nguồn chính để thử)', '报警主机：备用电池（断主电测试）', 'Tủ chạy bằng ắc quy bình thường', '电池供电下主机正常'),
+      isoNum_('ELEC', 'Điện áp ắc quy dự phòng', '备用电池电压', 'V', 'NONE', null, null, ISO_OPT_),
+      isoPf_('Nhật ký sự kiện, đồng hồ của tủ', '主机事件记录、时钟', 'Ghi đủ sự kiện, giờ đúng', '记录完整、时间准确'),
+      isoPf_('Giám sát đường dây: thử hở mạch / ngắn mạch (quý)', '线路监视：模拟断路/短路（季度）', 'Tủ báo lỗi đúng zone / loop', '主机正确显示故障回路', false),
+      isoPf_('Liên động: bơm chữa cháy, quạt – AHU, cửa từ (quý)', '联动：消防泵、风机/空调箱、门磁（季度）', 'Liên động đúng thiết kế', '按设计联动', false),
+      isoPf_('Đầu báo khói, nhiệt – thử luân phiên zone (quý)', '感烟、感温探测器–按回路轮换测试（季度）', 'Tủ nhận đúng địa chỉ / zone', '主机正确接收地址/回路', false),
+      isoPf_('Đầu báo khu vực bụi giấy (bế, cắt, dán hộp)', '纸尘区域探测器（模切、切纸、糊盒）', 'Sạch, không bị che phủ', '清洁、无遮盖'),
+      isoPf_('Nút ấn báo cháy (quý)', '手动报警按钮（季度）', 'Thử ngẫu nhiên đạt; nắp nguyên', '抽测合格；盖板完好', false),
+      isoPf_('Chuông, còi, đèn chớp báo cháy (quý)', '警铃、警报器、声光报警器（季度）', 'Nghe, thấy rõ ở mọi khu vực', '各区域均可听到、看到', false),
+      isoPf_('Đèn sự cố: nhấn TEST hoặc cắt nguồn', '应急灯：按TEST键或断电', 'Sáng ngay khi mất điện', '断电后立即点亮'),
+      isoNum_('OTHER', 'Đèn sự cố: thời gian xả ắc quy (quý)', '应急灯：电池放电时间（季度）', 'phút', 'NONE', null, null, { stdVi: 'Đủ thời gian theo thiết kế', stdZh: '持续时间符合设计', req: false }),
+      isoPf_('Đèn, biển chỉ dẫn thoát nạn (EXIT)', '疏散指示灯、标志（EXIT）', 'Sáng rõ, đúng hướng, không che', '明亮、方向正确、无遮挡'),
+      isoPf_('Lối thoát nạn, cửa thoát nạn', '疏散通道、安全出口门', 'Không khóa, không chắn lối', '未上锁、无阻挡')
+    ] },
+  { key: 'BM-CĐ-11-03', form_code: 'BM-CĐ-11-03', frequency: 'DAY',
+    name_vi: 'Nhật ký vận hành hệ thống xử lý nước thải', name_zh: '废水处理系统运行记录',
+    note_vi: 'Giới hạn vận hành là giá trị mẫu – chỉnh theo hệ thống thực tế; giới hạn xả theo giấy phép môi trường / thỏa thuận đấu nối KCN. Vượt giới hạn: báo Tổ trưởng CĐ, lập CAR. Bùn ghi sổ chất thải.',
+    note_zh: '运行限值为参考值——按实际系统调整；排放限值按环境许可/园区接管协议。超限：报告机电组长并开具纠正措施单。污泥记入废物台账。',
+    items: [
+      isoNum_('OTHER', 'Đồng hồ nước vào', '进水表读数', 'm³', 'NONE', null, null, { stdVi: '—', stdZh: '—' }),
+      isoNum_('QUALITY', 'pH bể điều hòa', '调节池pH', '', 'RANGE', 6.5, 8.5),
+      isoNum_('QUALITY', 'pH bể phản ứng', '反应池pH', '', 'NONE', null, null, ISO_OPT_),
+      isoNum_('QUALITY', 'DO', '溶解氧DO', 'mg/L', 'RANGE', 2, 4),
+      isoNum_('QUALITY', 'SV30', 'SV30', '%', 'RANGE', 15, 30),
+      isoNum_('QUALITY', 'pH đầu ra', '出水pH', '', 'NONE', null, null, { stdVi: 'Theo giấy phép môi trường', stdZh: '按环境许可' }),
+      isoPf_('Cảm quan nước đầu ra', '出水感官', 'Trong, không màu, mùi lạ', '清澈、无异色异味'),
+      isoPf_('Thiết bị: bơm, máy thổi khí', '设备：水泵、鼓风机', 'Hoạt động bình thường', '运行正常'),
+      isoText_('Hóa chất châm (loại – kg)', '加药（种类–kg）'),
+      isoNum_('OTHER', 'Bùn xả / ép', '排泥/压泥', 'kg', 'NONE', null, null, { stdVi: '—', stdZh: '—', req: false }),
+      isoNum_('QUALITY', 'COD đo nhanh', 'COD快检', 'mg/L', 'NONE', null, null, { stdVi: 'Theo giấy phép môi trường', stdZh: '按环境许可', req: false })
+    ] },
+  { key: 'BM-CĐ-11-04', form_code: 'BM-CĐ-11-04', frequency: 'DAY',
+    name_vi: 'Nhật ký vận hành hệ thống xử lý khí thải (bụi, hơi dung môi VOC)', name_zh: '废气处理系统运行记录（粉尘、VOC）',
+    note_vi: 'Gán cho từng hệ thống (than hoạt tính, tháp rửa khí, lọc bụi túi vải…). Giá trị chuẩn theo hướng dẫn vận hành / thiết kế. Than, túi lọc thải ghi sổ chất thải nguy hại.',
+    note_zh: '分配给每个系统（活性炭、洗涤塔、布袋除尘等）。标准值按操作说明/设计。废活性炭、滤袋记入危废台账。',
+    items: [
+      isoPf_('Quạt hút', '引风机', 'Hoạt động bình thường', '运行正常'),
+      isoNum_('ELEC', 'Tần số quạt', '风机频率', 'Hz', 'NONE', null, null, ISO_OPT_),
+      isoNum_('ELEC', 'Dòng điện quạt', '风机电流', 'A', 'NONE'),
+      isoNum_('PRESS', 'Chênh áp tầng lọc', '过滤层压差', 'Pa', 'NONE'),
+      isoNum_('TEMP', 'Nhiệt độ khí vào', '进气温度', '°C', 'MAX', null, 40),
+      isoNum_('QUALITY', 'Tháp rửa: pH', '洗涤塔pH', '', 'NONE', null, null, ISO_OPT_),
+      isoNum_('PRESS', 'Áp rũ bụi', '清灰压力', 'bar', 'NONE', null, null, ISO_OPT_),
+      isoPf_('Ống thải: cảm quan', '排气筒感官', 'Không khói, mùi bất thường', '无异常烟气、气味'),
+      isoNum_('QUALITY', 'VOC đo nhanh', 'VOC快检', 'ppm', 'NONE', null, null, ISO_OPT_),
+      isoPf_('Đường ống kín', '管道密封', 'Không hở, không rò', '无破损、无泄漏'),
+      isoNum_('OTHER', 'Thay than hoạt tính', '更换活性炭', 'kg', 'NONE', null, null, { stdVi: '—', stdZh: '—', req: false })
+    ] },
+  { key: 'BM-CĐ-11-07', form_code: 'BM-CĐ-11-07', frequency: 'MONTH',
+    name_vi: 'Kiểm tra khu lưu dầu – hóa chất & bộ ứng phó tràn đổ', name_zh: '油品、化学品存放区及泄漏应急包检查',
+    note_vi: 'Gán cho từng khu (kho dầu mỡ, kho / tủ hóa chất, bồn dầu máy phát, kho chất thải nguy hại). Tồn tại nghiêm trọng / lặp lại: lập CAR.',
+    note_zh: '分配给每个区域（油品仓库、化学品仓库/柜、发电机油罐、危废仓）。严重或重复问题：开具纠正措施单。',
+    items: [
+      isoPf_('Biển báo, nội quy, khóa cửa', '标识、制度、门锁', 'Đủ, rõ; hạn chế người không phận sự', '齐全清晰；限制无关人员进入'),
+      isoPf_('Sàn, bờ bao, khay hứng', '地面、围堰、接油盘', 'Chống thấm, nguyên vẹn, không đọng dầu – hóa chất; đủ dung tích chứa', '防渗完好，无积存；容积足够'),
+      isoPf_('Thùng chứa, nhãn', '容器、标签', 'Kín, có nắp, không rò rỉ; có tên & nhãn GHS', '密闭有盖无泄漏；有名称及GHS标签'),
+      isoPf_('Phân khu hóa chất không tương thích', '不相容化学品分区', 'Để riêng (axit – kiềm, oxy hóa – dễ cháy)', '分开存放（酸—碱、氧化剂—易燃物）'),
+      isoPf_('SDS & lượng tồn', 'SDS及存量', 'SDS tiếng Việt tại chỗ, đúng hóa chất; tồn ≤ mức tối đa', '现场有越南语SDS且一致；存量≤最大存量'),
+      isoPf_('Thông gió, nguồn nhiệt, điện', '通风、热源、电气', 'Thông thoáng; xa nguồn nhiệt, tia lửa; không dây điện tạm', '通风良好；远离热源火花；无临时电线'),
+      isoPf_('Chữa cháy, lối đi', '消防、通道', 'Bình chữa cháy còn hạn, không bị che; lối đi thông thoáng', '灭火器有效且无遮挡；通道畅通'),
+      isoPf_('PPE, vòi rửa mắt', '防护用品、洗眼器', 'Đủ găng, kính, tạp dề; vòi rửa mắt hoạt động', '手套、护目镜、围裙齐全；洗眼器可用', false),
+      isoPf_('Rãnh thoát nước gần khu', '附近排水沟', 'Có nắp / van chặn; chất tràn không ra cống nước mưa', '有盖板/截止阀；泄漏物不流入雨水管网'),
+      isoPf_('Kho chất thải nguy hại', '危废仓', 'Biển cảnh báo; thùng có nhãn mã CTNH, đúng khu; sổ cập nhật', '设警示标识；容器标注危废代码并分区；台账已更新', false),
+      isoPf_('Bộ ứng phó tràn đổ: vị trí', '泄漏应急包：位置', 'Gần khu, dễ thấy, dễ lấy, có biển chỉ dẫn', '靠近区域，醒目易取，有指示标识'),
+      isoPf_('Bộ ứng phó: vật tư thấm hút', '应急包：吸附材料', 'Đủ theo danh mục (phao quây, gối thấm, tấm thấm, cát / bột thấm)', '按清单齐全（围栏索、吸附枕、吸附棉、砂/吸附粉）'),
+      isoPf_('Bộ ứng phó: dụng cụ, PPE, niêm phong', '应急包：工具、防护用品、封条', 'Đủ xẻng, chổi, túi chất thải, găng, kính; niêm phong nguyên', '铲、扫帚、废物袋、手套、护目镜齐全；封条完好'),
+      isoPf_('Bộ ứng phó: hướng dẫn', '应急包：处置说明', 'Có hướng dẫn xử lý tràn đổ & số điện thoại khẩn cấp', '附有泄漏处置说明及紧急联系电话')
+    ] },
+  { key: 'BM-CĐ-13-01', form_code: 'BM-CĐ-13-01', frequency: 'MONTH',
+    name_vi: 'Kiểm tra định kỳ nhà xưởng & kết cấu trên cao', name_zh: '厂房及高处结构定期检查',
+    note_vi: 'Gán cho từng nhà xưởng / kho (khai trong M&E). Mục 14–15 chỉ kiểm tra sau mưa bão (ghi ở ghi chú khi kiểm thêm). Không đạt vào Chờ xử lý; tồn tại nghiêm trọng lập CAR.',
+    note_zh: '分配给每个厂房/仓库（在M&E登记）。第14–15项仅在暴雨台风后检查（加查写在备注）。不合格进入待处理；严重问题开具纠正措施单。',
+    items: [
+      isoPf_('Mái tôn, tấm lấy sáng, mái che', '屋面板、采光板、雨棚', 'Không thủng, dột, tốc; vít đủ, kín', '无破洞、漏水、掀起；螺钉齐全密封'),
+      isoPf_('Máng xối, ống thoát nước mưa', '雨水槽、雨水管', 'Không tắc, không tràn; mối nối kín', '无堵塞、无溢流；接口密封'),
+      isoPf_('Tường, vách ngăn, cột', '墙面、隔墙、柱', 'Không nứt, thấm; sơn không bong tróc', '无裂缝、渗水；油漆无剥落'),
+      isoPf_('Sàn xưởng, sàn kho', '车间及仓库地面', 'Không nứt, bong; không đọng nước, dầu', '无裂缝、剥落；无积水、积油'),
+      isoPf_('Cửa, cửa cuốn, rèm nhựa, cửa sổ', '门、卷帘门、塑料门帘、窗', 'Đóng kín; gioăng, chổi đáy, rèm còn tốt', '关闭严密；密封条、门底刷、门帘完好'),
+      isoPf_('Rãnh thoát nước, hố ga trong xưởng', '车间排水沟、集水井', 'Có nắp, không tắc, không mùi', '有盖板、无堵塞、无异味'),
+      isoPf_('Xà gồ, kèo, sàn thao tác, lan can', '檩条、屋架、操作平台、栏杆', 'Không gỉ bong, biến dạng; bu lông đủ', '无锈蚀剥落、变形；螺栓齐全'),
+      isoPf_('Bụi giấy trên xà gồ, ống gió, máng đèn', '檩条、风管、灯槽纸尘', 'Không tích tụ', '无积尘'),
+      isoPf_('Nước ngưng: ống gió, ống lạnh, AHU', '风管、冷水管、空调箱冷凝水', 'Không nhỏ giọt xuống máy, giấy, sản phẩm', '无滴落至设备、纸张、产品'),
+      isoPf_('Đèn, máng đèn khu sản xuất, kho', '生产区及仓库灯具', 'Có chụp bảo vệ, không vỡ', '有防护罩、无破损'),
+      isoPf_('Khe hở tường, mái, ống xuyên tường', '墙体、屋顶、穿墙管缝隙', 'Bịt kín; chim, chuột không lọt vào', '已封堵，鸟、鼠无法进入'),
+      isoPf_('Lưới chắn côn trùng cửa sổ, ô gió', '窗户、通风口防虫网', 'Nguyên vẹn, không rách, không bụi dày', '完好、无破损、无严重积尘'),
+      isoPf_('Dấu hiệu chim, côn trùng, chuột', '鸟、昆虫、鼠类迹象', 'Không phát hiện tổ, phân, xác, vết gặm', '未发现巢穴、粪便、尸体、咬痕'),
+      isoPf_('Sau mưa bão: nước vào kho giấy, tủ điện, máy', '暴雨后：雨水侵入纸库、配电柜、设备', 'Không có; giấy, hàng ướt đã cách ly', '无；受潮纸张、货物已隔离', false),
+      isoPf_('Sau mưa bão: biển hiệu, cây xanh, vật treo', '暴雨后：招牌、树木、悬挂物', 'Không lỏng, gãy, nghiêng, nguy cơ rơi đổ', '无松动、折断、倾斜、坠落风险', false)
+    ] },
+  { key: 'BM-CĐ-13-02', form_code: 'BM-CĐ-13-02', frequency: 'MONTH',
+    name_vi: 'Kiểm tra kính, nhựa cứng dễ vỡ', name_zh: '玻璃及易碎硬塑检查',
+    note_vi: 'Sửa danh sách hạng mục theo từng vị trí của khu (mã vị trí, vật dụng, số lượng; tối đa 60). Vỡ, nứt, thiếu: lập biên bản xử lý sự cố vỡ kính, QA xác nhận trước khi chạy lại.',
+    note_zh: '按区域内每个位置修改项目清单（位置编号、物品、数量；最多60项）。破碎、裂纹、缺失：填写玻璃破碎事件处理记录，品保确认后方可恢复生产。',
+    items: [
+      isoPf_('Đèn, chụp đèn trên khu sản xuất', '生产区上方灯具、灯罩', 'Nguyên vẹn, có chụp bảo vệ', '完好，有防护罩'),
+      isoPf_('Cửa kính, vách kính, cửa sổ', '玻璃门、玻璃隔断、窗户', 'Nguyên vẹn, không nứt', '完好、无裂纹'),
+      isoPf_('Mặt kính đồng hồ, kính quan sát trên máy', '仪表玻璃、设备观察窗', 'Nguyên vẹn, không nứt', '完好、无裂纹'),
+      isoPf_('Nắp, che chắn nhựa cứng trên máy', '设备硬塑盖板、防护罩', 'Nguyên vẹn, không thiếu mảnh', '完好、无缺损'),
+      isoNum_('OTHER', 'Số vị trí đã kiểm tra', '已检查位置数', 'vị trí', 'NONE', null, null, { stdVi: 'Đủ vị trí trong danh mục', stdZh: '清单内全部位置' }),
+      isoNum_('OTHER', 'Số vị trí vỡ, nứt, thiếu', '破损位置数', 'vị trí', 'MAX', null, 0)
+    ] }
+];
+
+/** Hạng mục máy phát: withLoad = mẫu tháng (có tải, thử ATS) */
+function isoGenItems_(withLoad) {
+  var a = [
+    isoPf_('Trước khởi động: nhớt, nước làm mát, dây đai', '启动前：机油、冷却液、皮带', 'Trong vạch Min – Max; không rò rỉ', '在Min–Max之间；无渗漏'),
+    isoNum_('LEVEL', 'Nhiên liệu bồn ngày', '日用油箱油位', '%', 'NONE'),
+    isoNum_('ELEC', 'Điện áp ắc quy khởi động', '启动蓄电池电压', 'V', 'NONE', null, null, { stdVi: '≥ theo nhà sản xuất; cọc bình, bộ sạc tốt', stdZh: '≥厂家要求；接线柱、充电器正常' }),
+    isoPf_('Sấy nước làm mát, lọc gió, ống xả', '冷却液加热器、空气滤清器、排气管', 'Bình thường', '正常'),
+    isoNum_('ELEC', 'Điện áp dây U12 / U23 / U31', '线电压U12/U23/U31', 'V', 'RANGE', 380, 420, { type: 'THREE_PHASE', imb: 3 }),
+    isoNum_('ELEC', 'Tần số', '频率', 'Hz', 'RANGE', 49.5, 50.5)
+  ];
+  if (withLoad) {
+    a.push(isoNum_('ELEC', 'Dòng điện I1 / I2 / I3 khi có tải', '带载电流I1/I2/I3', 'A', 'NONE', null, null, { type: 'THREE_PHASE', imb: 10 }));
+    a.push(isoNum_('ELEC', 'Công suất tải', '负载功率', '% định mức', 'MIN', 30));
+  }
+  a.push(isoNum_('PRESS', 'Áp suất nhớt', '机油压力', 'bar', 'NONE'));
+  a.push(isoNum_('TEMP', 'Nhiệt độ nước làm mát', '冷却液温度', '°C', 'MAX', null, 95));
+  a.push(isoNum_('OTHER', 'Thời gian chạy', '运行时间', 'phút', 'MIN', withLoad ? 30 : 10));
+  a.push(isoPf_('Khói thải, tiếng ồn, rung', '排烟、噪声、振动', 'Không bất thường', '无异常'));
+  if (withLoad) {
+    a.push(isoNum_('OTHER', 'Thử ATS: mất lưới → máy phát đóng tải', 'ATS测试：市电中断→发电机带载', 'giây', 'NONE'));
+    a.push(isoPf_('Chuyển về lưới, làm mát máy', '恢复市电、冷机', 'Đúng trình tự', '程序正确'));
+    a.push(isoNum_('LEVEL', 'Nhiên liệu tồn bồn chính', '主油罐存油量', 'L', 'NONE'));
+  }
+  a.push(isoNum_('OTHER', 'Giờ chạy tích lũy', '累计运行小时', 'h', 'NONE', null, null, { stdVi: '—', stdZh: '—' }));
+  a.push(isoPf_('Sau khi thử', '试机后', 'Trả về AUTO; ATS tự động; CB máy phát đóng', '恢复AUTO；ATS自动；发电机断路器合闸'));
+  return a;
+}
+
+/** UUID v4 cố định theo khóa (mẫu ISO tạo lại không trùng; chạy lại cùng lệnh không tạo hai lần) */
+function isoUuid_(key) {
+  var h = sha256_('iso-template:' + key).map(function (b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
+  return h.slice(0, 8) + '-' + h.slice(8, 12) + '-4' + h.slice(13, 16) + '-' + '89ab'[parseInt(h.charAt(16), 16) % 4] + h.slice(17, 20) + '-' + h.slice(20, 32);
+}
+
+/** Danh sách mẫu ISO cho app chọn: {key, form_code, name, frequency, items, template_id, exists} */
+function isoTemplateList_() {
+  var have = {};
+  readRows_('Templates').forEach(function (t) { have[t.template_id] = t; });
+  return ISO_TEMPLATES_.map(function (t) {
+    var id = isoUuid_(t.key), cur = have[id];
+    return { key: t.key, form_code: t.form_code, name_vi: t.name_vi, name_zh: t.name_zh, frequency: t.frequency, items: t.items.length,
+      template_id: id, exists: !!cur, template_code: cur ? cur.template_code : '', active: cur ? cur.active !== false : null };
+  });
+}
+
+/** Sheet Templates đã có cột form_code (đã chạy migrateSchema sau khi dán mã mới) */
+function isoMigrated_() {
+  return hdr_('Templates').cols.indexOf('form_code') >= 0;
+}
+
+/** template.isoList: danh sách mẫu ISO và mẫu nào đã tạo */
+function templateIsoList_(ctx) {
+  return { templates: isoTemplateList_(), migrated: isoMigrated_() };
+}
+
+/**
+ * template.isoSeed {keys: [...]} — Trưởng bộ phận/Quản trị, PIN. Tạo các mẫu chọn (phiên bản 1, đang dùng, chưa gán máy);
+ * mẫu đã có (kể cả đã ngừng) bỏ qua. Mẫu theo ca dùng mọi ca đang cài đặt.
+ */
+function templateIsoSeed_(ctx) {
+  var p = ctx.req.payload || {};
+  var keys = Array.isArray(p.keys) ? p.keys.map(String) : [];
+  var defs = ISO_TEMPLATES_.filter(function (t) { return keys.indexOf(t.key) >= 0; });
+  if (!defs.length) throw validationError_([fieldError_('keys', 'REQUIRED')]);
+  if (!isoMigrated_()) throw validationError_([fieldError_('keys', 'MIGRATE_REQUIRED')]);
+  var allShifts = shiftsCfg_().map(function (s) { return String(s.no); }).join(',');
+  return executeWrite_(ctx, {
+    entity_type: 'TEMPLATE', entity_id: '',
+    build: function (st) {
+      var have = {};
+      readRows_('Templates').forEach(function (t) { have[t.template_id] = true; });
+      var su = {}, writes = [], created = [], skipped = [];
+      var nowIso = isoVN_(now_());
+      var human = function (fields) { var m = {}; fields.forEach(function (f) { m[f] = { src: 'vi', state: 'HUMAN', at: nowIso }; }); return m; };
+      defs.forEach(function (t) {
+        var id = isoUuid_(t.key);
+        if (have[id]) { skipped.push(t.key); return; }
+        var row = cNew_(ctx, {
+          template_id: id, template_code: allocCode_(st, su, 'TEMPLATE'), name_vi: t.name_vi, name_zh: t.name_zh, frequency: t.frequency,
+          shifts: t.frequency === 'SHIFT' ? allShifts : '', revision: 1, active: true, note_vi: t.note_vi || '', note_zh: t.note_zh || '',
+          form_code: t.form_code, i18n_meta: human(['name', 'note'])
+        });
+        writes.push({ sheet: 'Templates', mode: 'insert', row: row });
+        t.items.forEach(function (it, i) {
+          var errs = [];
+          var std = normStd_(it, errs, 'items.' + i + '.');
+          if (errs.length) throw apiError_('INTERNAL_ERROR', 'ISO ' + t.key + ' #' + (i + 1) + ' ' + errs[0].code);
+          var r = Object.assign(std, {
+            template_item_id: uuid_(), template_id: id, revision: 1, item_key: uuid_(), step_no: i + 1, library_item_id: '',
+            name_vi: it.name_vi, name_zh: it.name_zh, std_text_vi: it.std_text_vi || '', std_text_zh: it.std_text_zh || '', how_vi: '', how_zh: '',
+            required: it.required !== false, photo_on_fail: false, i18n_meta: human(['name', 'std_text'])
+          });
+          writes.push({ sheet: 'TemplateItems', mode: 'insert', row: cNew_(ctx, r) });
+        });
+        created.push({ key: t.key, template_id: id, template_code: row.template_code });
+      });
+      if (!created.length) throw validationError_([fieldError_('keys', 'ISO_ALL_EXIST')]);
+      return {
+        writes: writes, state: su, noReplay: true,
+        result: { created: created, skipped: skipped },
+        audit: { entity_type: 'TEMPLATE', entity_id: '', after_json: { iso_created: created.map(function (c) { return c.key + '=' + c.template_code; }), skipped: skipped } }
+      };
+    }
+  });
+}
+
 // ===== i18n/labels.json =====
 /** Bản chép từ điển nhãn của app (5.3) cho email, Excel, lời báo */
-var LABELS = {"rpt.title":["Phiếu kiểm tra thiết bị","设备点检表"],"rpt.machine":["Thiết bị","设备"],"rpt.area":["Khu vực","区域"],"rpt.month":["Tháng","月份"],"rpt.number":["Số","编号"],"rpt.generated_at":["Lập lúc","编制时间"],"rpt.prepared_by":["Người lập","编制"],"rpt.approved_by":["Trưởng bộ phận","部门主管"],"rpt.sign_hint":["Ký, ghi rõ họ tên","签名"],"rpt.col_item":["Hạng mục","项目"],"rpt.col_std":["Tiêu chuẩn","标准"],"rpt.row_checker":["Người kiểm","点检人"],"rpt.row_confirm":["Trưởng BP xác nhận","主管确认"],"rpt.shift":["Ca {N}","{N}班"],"rpt.revision":["phiên bản {N}","第{N}版"],"rpt.tile_runs":["Lượt kiểm","点检次数"],"rpt.tile_rate":["Hoàn thành","完成率"],"rpt.tile_fail":["Không đạt","不合格"],"rpt.tile_warn":["Cần chú ý","需关注"],"rpt.legend":["Số = giá trị đo; ✓ Đạt; nền vàng = Cần chú ý; nền đỏ = Không đạt; – = bỏ sót; ô trống = chưa tới kỳ","数值=测量值；✓ 合格；黄底=需关注；红底=不合格；– =漏检；空白=未到期"],"rpt.checkers":["Người kiểm","点检人"],"rpt.abnormals":["Bất thường và xử lý","异常与处理"],"rpt.col_date":["Ngày","日期"],"rpt.col_value":["Kết quả","结果"],"rpt.col_note":["Ghi chú","备注"],"rpt.col_resolution":["Xử lý","处理"],"rpt.col_status":["Trạng thái","状态"],"rpt.no_abnormals":["Không có bất thường trong tháng","本月无异常"],"rpt.missed_reasons":["Lý do bỏ sót","漏检原因"],"rpt.col_reason":["Lý do","原因"],"rpt.col_by":["Người ghi","记录人"],"freq.SHIFT":["Mỗi ca","每班"],"freq.DAY":["Mỗi ngày","每日"],"freq.WEEK":["Mỗi tuần","每周"],"freq.MONTH":["Mỗi tháng","每月"],"abn_status.OPEN":["Chưa xử lý","未处理","red"],"abn_status.RESOLVED":["Đã xử lý","已处理","green"],"abn_status.CANCELLED":["Đã hủy","已取消","grey"],"field.no_records":["Chưa có dữ liệu","暂无数据"],"account.add_home":["Thêm app vào Màn hình chính: trong Safari bấm Chia sẻ → Thêm vào MH chính","将应用添加到主屏幕：在Safari中点击分享→添加到主屏幕"],"account.admin":["Quản trị","管理"],"account.api_version":["Phiên bản API","API版本"],"account.app_version":["Phiên bản app","应用版本"],"account.display_name":["Tên hiển thị","显示名称"],"account.expires":["Hết hạn","到期"],"account.guide":["Hướng dẫn","使用指南"],"account.info":["Thông tin","信息"],"account.issued":["Đăng nhập lúc","登录时间"],"account.last_seen":["Hoạt động gần nhất","最近活动"],"account.level":["Cấp","级别"],"account.profile":["Hồ sơ","个人资料"],"account.security":["Bảo mật","安全"],"account.server_version":["Phiên bản máy chủ","服务器版本"],"account.sessions":["Phiên đăng nhập","登录会话"],"account.sync":["Đồng bộ","同步"],"account.this_device":["Máy này","本机"],"adm.audit.after":["Sau","修改后"],"adm.audit.before":["Trước","修改前"],"adm.audit.from":["Từ ngày","从"],"adm.audit.more":["Còn nữa — thu hẹp bộ lọc để xem thêm","还有更多——请缩小筛选范围"],"adm.audit.to":["Đến ngày","至"],"adm.audit.user":["Người làm","操作人"],"adm.backup.docs":["Tài liệu","文件"],"adm.backup.last":["Lần sao lưu gần nhất","最近一次备份"],"adm.backup.no_manifest":["Không có manifest.json: lần chạy bị dừng giữa chừng, xem Lần thực thi trong Apps Script","缺少manifest.json：运行中途停止，请查看Apps Script执行记录"],"adm.backup.none":["Chưa có bản sao lưu","暂无备份"],"adm.backup.note":["Tự động hằng tuần ({D}, {H}:00), giữ {N} bản đã kiểm chứng. Khôi phục làm thủ công theo hướng dẫn","每周自动备份（{D} {H}:00），保留{N}份已校验备份。恢复需按指南手动操作"],"adm.backup.queued":["Đang chờ sao lưu, màn tự cập nhật…","等待备份中，页面自动刷新…"],"adm.backup.retry":["Chạy lại sau ghi đồng thời","因同时写入而重跑"],"adm.backup.rows":["Số dòng","行数"],"adm.backup.running":["Đang sao lưu (thường 1–3 phút), màn tự cập nhật…","正在备份（通常1–3分钟），页面自动刷新…"],"adm.status.base_mismatch":["Khác địa chỉ app đang dùng ({U})","与当前应用地址不同（{U}）"],"adm.status.checked_at":["Kiểm lúc {T}","检查于{T}"],"adm.status.default":["Mặc định","默认"],"adm.status.edit_setting":["Sửa cấu hình","修改设置"],"adm.status.ok":["Đạt","正常","green"],"adm.status.readonly":["Chỉ đọc","只读","grey"],"adm.status.settings":["Cấu hình","系统设置"],"adm.status.warn":["Cảnh báo","警告","amber"],"adm.user.add":["Thêm người dùng","新增用户"],"adm.user.code":["Mã nhân viên","员工编号"],"adm.user.confirm_reset":["Cấp PIN tạm mới? PIN cũ hết dùng, mọi phiên bị thu hồi","发放新的临时PIN？旧PIN失效，所有会话将被撤销"],"adm.user.confirm_revoke":["Thu hồi mọi phiên của người này? Họ phải đăng nhập lại","撤销该用户的所有会话？该用户需重新登录"],"adm.user.email":["Email (không bắt buộc)","邮箱（可选）"],"adm.user.hide_locked":["Ẩn tài khoản đã khóa","隐藏已锁定的账号"],"adm.user.last_login":["Đăng nhập cuối","最近登录"],"adm.user.owner_note":["Chủ hệ thống: chỉ chủ hệ thống thao tác được","系统所有者：仅系统所有者可操作"],"adm.user.pin_locked":["Đang khóa do nhập sai PIN","因输错PIN被锁定","amber"],"adm.user.role_note":["Đổi cấp hoặc vai trò làm mọi phiên của người này hết hiệu lực","修改级别或岗位后，该用户所有会话失效"],"adm.user.self_note":["Tài khoản của bạn: đổi PIN ở trang Tài khoản","这是您的账号：请在账户页修改PIN"],"adm.user.sessions":["Phiên đang mở","在线会话"],"adm.user.show_locked":["Hiện tài khoản đã khóa ({N})","显示已锁定的账号（{N}）"],"adm.user.temp_pin_once":["PIN tạm chỉ hiện một lần. Ghi lại và đưa tận tay người dùng; hạn {H} giờ, đăng nhập xong phải đổi PIN","临时PIN只显示一次。请记下并当面交给用户；有效期{H}小时，登录后必须修改PIN"],"adm.user.temp_pin_title":["PIN tạm","临时PIN"],"adm.user.temp_pin_until":["Hạn PIN tạm","临时PIN到期"],"adm.user.total":["{N} tài khoản","共{N}个账号"],"admin.audit":["Nhật ký thao tác","操作日志"],"admin.backup":["Sao lưu","备份"],"admin.report_logo":["Logo trên báo cáo","报表标志"],"admin.status":["Trạng thái hệ thống","系统状态"],"admin.users":["Người dùng và PIN tạm","用户与临时PIN"],"attempts_left":["Còn {N} lần thử","还可尝试 {N} 次"],"auth.checking_pin":["Đang kiểm tra PIN…","正在验证PIN…"],"auth.expired_offline":["Phiên đã hết hạn: chỉ xem nháp và xuất dự phòng","会话已过期：只能查看草稿和导出备份"],"auth.hello":["Xin chào","你好"],"auth.loading_data":["Đang tải dữ liệu…","正在加载数据…"],"auth.loading_page":["Đang tải dữ liệu (phần {N})…","正在加载数据（第 {N} 部分）…"],"auth.logout_all_confirm":["Mọi phiên, kể cả máy đang dùng, sẽ hết hiệu lực. Dùng khi mất điện thoại.","所有会话（包括本机）将失效。用于手机丢失时。"],"auth.logout_has_drafts":["Còn {N} mục chưa gửi lên máy chủ. Chọn cách xử lý trước khi đăng xuất.","仍有 {N} 条未同步到服务器。退出前请选择处理方式。"],"auth.open_with_pin":["Mở bằng PIN","用PIN打开"],"auth.others_relogin":["Các thiết bị khác phải đăng nhập lại","其他设备需重新登录"],"auth.pin_skip_wait":["Không chờ mạng — mở bằng dữ liệu trên máy","不等网络 — 使用本机数据打开"],"auth.revoked":["Phiên đã bị thu hồi hoặc quyền đã thay đổi","会话已撤销或权限已变更"],"auth.seconds":["{N} giây","{N} 秒"],"auth.server_changed":["App đã chuyển sang máy chủ khác — đăng nhập lại. Nháp chưa gửi của máy chủ cũ nằm ở mục Nháp thế hệ dữ liệu cũ","应用已切换到其他服务器——请重新登录。旧服务器未发送的草稿在“旧数据草稿”中"],"auth.server_slow":["Máy chủ đang phản hồi chậm…","服务器响应较慢…"],"auth.session_warn":["Phiên sắp hết hạn — {D}","会话即将到期 — {D}"],"auth.step_connect":["Kết nối máy chủ","连接服务器"],"auth.step_data":["Cập nhật dữ liệu","更新数据"],"auth.step_open":["Mở trang chủ","打开首页"],"auth.temp_pin_stale":["PIN tạm này không còn dùng được (đã có PIN tạm mới hơn, hoặc quá hạn đổi PIN). Đăng nhập lại bằng PIN tạm mới nhất","此临时PIN已失效（已发放更新的临时PIN或超过修改时限）。请用最新的临时PIN重新登录"],"back":["Quay lại","返回"],"btn.back":["Quay lại","返回"],"btn.backup_now":["Sao lưu ngay","立即备份"],"btn.cancel":["Hủy","取消"],"btn.change_pin":["Đổi PIN","修改PIN"],"btn.close":["Đóng","关闭"],"btn.confirm":["Đúng","确认"],"btn.delete_draft":["Xóa nháp","删除草稿"],"btn.delete_drafts":["Xóa nháp","删除草稿"],"btn.edit":["Sửa","编辑"],"btn.export_backup":["Xuất dự phòng","导出备份"],"btn.filter":["Lọc","筛选"],"btn.keep_drafts":["Giữ nháp trên máy","保留本机草稿"],"btn.lock":["Khóa","锁定"],"btn.logout":["Đăng xuất","退出登录"],"btn.logout_all":["Đăng xuất mọi thiết bị","退出所有设备"],"btn.open":["Mở","打开"],"btn.relogin":["Đăng nhập lại","重新登录"],"btn.reset_pin":["Cấp PIN tạm","发放临时PIN"],"btn.retry":["Thử lại","重试"],"btn.revoke":["Thu hồi","撤销"],"btn.revoke_sessions":["Thu hồi phiên","撤销会话"],"btn.save":["Lưu","保存"],"btn.set_role":["Đổi cấp/vai trò","修改级别/岗位"],"btn.sync_now":["Đồng bộ ngay","立即同步"],"btn.unlock":["Mở khóa","解锁"],"btn.use_server":["Dùng bản máy chủ","采用服务器版本"],"cancel":["Hủy","取消"],"change_pin":["Đổi PIN","修改PIN"],"col.actions":["Thao tác","操作"],"col.status":["Trạng thái","状态"],"conflict.rebased":["Đã gửi lại thay đổi của bạn trên bản máy chủ mới nhất","已在服务器最新版本上重新发送您的修改"],"conflict.title":["Xử lý xung đột","处理冲突"],"conflict.use_server_confirm":["Bỏ thay đổi của bạn và dùng bản máy chủ? Có thể xuất dự phòng trước.","放弃您的修改并采用服务器版本？可先导出备份。"],"current_pin":["PIN hiện tại","当前PIN"],"draft.auto_delete":["Tự xóa sau {N} ngày","{N} 天后自动删除"],"draft.blocked_hint":["Mục trước của cùng lượt kiểm bị từ chối/xung đột; xử lý mục đó trước","同一点检的前一项被拒绝/冲突，请先处理该项"],"draft.created":["Tạo lúc","创建时间"],"draft.delete_all_confirm":["Xóa hẳn {N} nháp chưa gửi? Không lấy lại được.","确定删除 {N} 份未同步草稿？删除后无法恢复。"],"draft.delete_confirm":["Xóa hẳn nháp này? Không lấy lại được.","确定删除此草稿？删除后无法恢复。"],"draft.empty":["Không có mục nào","没有项目"],"draft.error_code":["Mã lỗi","错误代码"],"draft.old_epoch":["Nháp thế hệ dữ liệu cũ","旧数据草稿"],"draft.other_user":["Máy còn {N} nháp của người dùng khác","本机有 {N} 份其他用户的草稿"],"draft.photos":["{N} ảnh","{N} 张照片"],"draft.recent_sent":["Đã gửi lên máy chủ (7 ngày gần nhất)","已同步（最近7天）"],"draft.rejected":["Nháp bị từ chối","被拒草稿"],"draft.sent_at":["Gửi lúc","同步时间"],"draft.size":["Dung lượng","大小"],"draft.title":["Nháp chờ đồng bộ","待同步草稿"],"employee_code":["Mã nhân viên","员工编号"],"env_test":["THỬ","测试"],"err.client":["Lỗi trên máy","本机错误"],"err.forbidden":["Không có quyền","无权限"],"err.not_found":["Không tìm thấy","未找到"],"err.reload_hint":["Nếu vừa có bản mới: bấm để tải lại toàn bộ app. Nháp chưa gửi vẫn giữ trên máy.","如刚更新版本：点击重新加载整个应用。未发送的草稿仍保留在本机。"],"err.reload_new":["Tải lại bản mới","重新加载最新版本"],"field.choose":["— Chọn —","— 请选择 —"],"field.invalid_date":["Ngày không hợp lệ","日期无效"],"field.name":["Tên","名称"],"field.number_ambiguous":["Đã hiểu là {A}. Nếu là số hàng nghìn, gõ liền không dấu (vd 12350)","已识别为 {A}；如为千位数，请连续输入（如 12350）"],"field.number_bad_sep":["Không dùng dấu chấm/phẩy để tách hàng nghìn; gõ 1234567","请勿使用千位分隔符，请输入 1234567"],"field.one_lang":["Chỉ cần nhập một thứ tiếng, máy chủ tự dịch bên kia","只需填写一种语言，服务器自动翻译另一种"],"field.reason":["Lý do","原因"],"field.reason_required":["Bắt buộc nhập lý do","必须填写原因"],"field.required":["Bắt buộc nhập","必填"],"forgot_pin":["Quên PIN","忘记PIN"],"forgot_pin_help":["Liên hệ quản trị để đặt lại PIN","请联系管理员重置密码"],"form.saved":["Đã lưu máy chủ","已同步"],"i18n.check_required":["Tick \"Đã kiểm tra bản dịch\" trước khi lưu","保存前请勾选\"已核对译文\""],"i18n.checked":["Đã kiểm tra bản dịch","已核对译文"],"i18n.lang_vi":["Tiếng Việt","越南语"],"i18n.lang_zh":["Tiếng Trung","中文"],"i18n.suggest":["Gợi ý dịch","翻译建议"],"i18n.suggest_need_one":["Nhập một bên rồi bấm Gợi ý dịch","先填写一种语言再点翻译建议"],"level.owner":["Chủ hệ thống","系统所有者"],"list.more":["Hiện thêm {N} (còn {R})","再显示{N}条（剩余{R}条）"],"locked":["Tạm khóa do nhập sai PIN nhiều lần, thử lại sau {N} phút","因多次输错PIN已暂时锁定，请 {N} 分钟后重试"],"login":["Đăng nhập","登录"],"logo.bad_type":["Chỉ nhận ảnh PNG hoặc JPEG","仅支持PNG或JPEG图片"],"logo.current":["Logo đang dùng","当前标志"],"logo.hint":["Nên dùng ảnh PNG nền trong suốt; app tự thu nhỏ còn tối đa 800 px trước khi gửi","建议使用透明背景PNG；应用发送前自动缩小至最长800像素"],"logo.none":["Chưa có logo — báo cáo in ra không có logo","尚未设置标志——报表不显示标志"],"logo.preview_note":["Xem trước ở cỡ đầu trang PDF","按PDF页眉大小预览"],"logo.remove":["Gỡ logo","移除标志"],"logo.remove_confirm":["Gỡ logo khỏi báo cáo? Báo cáo in sau đó sẽ không có logo.","从报表移除标志？之后打印的报表将不显示标志。"],"logo.removed":["Đã gỡ logo","已移除标志"],"logo.replace":["Đổi logo","更换标志"],"logo.saved":["Đã lưu logo — báo cáo in từ giờ có logo mới","标志已保存——此后打印的报表使用新标志"],"logo.upload":["Chọn ảnh logo","选择标志图片"],"logo.where":["Logo công ty hiện ở đầu mỗi trang PDF phiếu kiểm tra, trên bản xem trước và tệp Excel báo cáo","公司标志显示在点检表PDF每页页眉、报表预览及报表Excel中"],"manual_code":["Mở theo mã","按编号打开"],"menu.title":["Checksheet","点检表"],"nav.account":["Tài khoản","账户"],"nav.home":["Trang chủ","首页"],"nav.scan":["Quét","扫码"],"need_network":["Cần kết nối mạng","需要网络连接"],"network_error":["Không kết nối được máy chủ","无法连接服务器"],"new_pin":["PIN mới","新PIN"],"new_pin_again":["Nhập lại PIN mới","确认新PIN"],"no_reuse_pin":["Không dùng lại PIN của app khác","请勿重复使用其他应用的PIN"],"offline":["Ngoại tuyến","离线"],"offline_unlock":["Mở khóa ngoại tuyến","离线解锁"],"op_state.COMMITTED":["Đã lưu máy chủ","已同步","green"],"open_with_pin":["Mở bằng PIN","用PIN打开"],"pin6":["PIN 6 số","六位数字密码"],"pin_format":["PIN phải gồm đúng 6 chữ số","PIN必须为6位数字"],"pin_mismatch":["Hai lần nhập PIN mới không khớp","两次输入的新PIN不一致"],"qr_inactive":["Máy đã ngừng sử dụng bên M&E","该设备在M&E中已停用"],"safari_tab":["Đang chạy trong Safari: nháp có thể bị xóa sau 7 ngày không mở","在Safari中运行：7天未打开草稿可能被清除"],"same_account":["Dùng cùng tài khoản với iPhone","与iPhone使用同一账户"],"save":["Lưu","保存"],"scan":["Quét QR máy","扫描设备二维码"],"scan_hint":["Đưa tem QR M&E dán trên máy vào khung, hoặc nhập mã máy (vd TB-0007)","将设备上的M&E二维码标签对准框内，或输入设备编号（如TB-0007）"],"server_url":["Địa chỉ máy chủ (/exec)","服务器地址 (/exec)"],"server_url_bad":["Link phải có dạng https://script.google.com/macros/s/…/exec","链接格式应为 https://script.google.com/macros/s/…/exec"],"server_url_missing":["Chưa có địa chỉ máy chủ","尚未设置服务器地址"],"shared_device":["Máy dùng chung","公用设备"],"show_pin":["Hiện PIN","显示PIN"],"sync.committed":["Đã lưu máy chủ","已同步"],"sync.committed_n":["Đã lưu máy chủ: {N} mục","已同步：{N} 条"],"sync.conflict":["Xung đột, cần xử lý","冲突，需处理"],"sync.dataset_reset":["Dữ liệu đã được đặt lại, cần tải lại","数据已重置，需重新加载"],"sync.done":["Đã đồng bộ","同步完成"],"sync.failed":["Lỗi gửi","同步失败"],"sync.last":["Lần đồng bộ cuối","上次同步"],"sync.maintenance":["Bảo trì","维护中"],"sync.need_network":["Cần kết nối mạng","需要网络连接"],"sync.never":["Chưa đồng bộ","尚未同步"],"sync.offline":["Ngoại tuyến","离线"],"sync.online":["Trực tuyến","在线"],"sync.queued":["Chờ gửi","待同步"],"sync.queued_count":["{N} mục chờ gửi","待同步数据 {N} 条"],"sync.safari_tab":["Đang chạy trong Safari: nháp có thể bị xóa sau 7 ngày không mở","在Safari中运行：7天未打开草稿可能被清除"],"sys.maintenance":["Hệ thống đang bảo trì","系统维护中"],"sys.maintenance_over":["Hệ thống đã hết bảo trì","系统维护已结束"],"sys.maintenance_strip":["Hệ thống đang bảo trì — chỉ xem dữ liệu trên máy","系统维护中 — 仅可查看本机数据"],"sys.maintenance_unlock":["Hệ thống đang bảo trì (ví dụ đang Xóa sạch dữ liệu). Chỉ mở được dữ liệu đã có trên máy; bảo trì xong app tự kiểm tra lại.","系统维护中（例如正在清空数据）。仅可打开本机已有数据；维护结束后应用会自动重新检查。"],"tab.calendar":["Lịch","日程"],"tag.env_test":["THỬ","测试"],"tag.machine_translated":["dịch máy","机器翻译"],"tag.no_translation":["Chưa có bản dịch","暂无译文"],"temp_pin":["Bạn đang dùng PIN tạm, hãy đặt PIN mới","您正在使用临时PIN，请设置新PIN"],"unknown_result":["Chưa rõ kết quả, đang hỏi lại máy chủ","结果未知，正在向服务器确认"],"user_status.ACTIVE":["Đang hoạt động","正常","green"],"user_status.DISABLED":["Ngừng dùng","已停用","grey"],"user_status.MUST_CHANGE_PIN":["Phải đổi PIN","需修改PIN","amber"],"op_state.QUEUED":["Chờ gửi","待同步","amber"],"op_state.PREPARED":["Đang gửi","同步中","navy"],"op_state.SENDING":["Đang gửi","同步中","navy"],"op_state.FAILED":["Lỗi gửi","同步失败","red"],"op_state.REJECTED":["Bị từ chối","被拒","red"],"op_state.CONFLICT":["Xung đột","冲突","red"],"op_state.UNKNOWN":["Chưa rõ kết quả","结果未知","amber"],"op_state.UNKNOWN_RESULT":["Chưa rõ kết quả","结果未知","amber"],"user_status.LOCKED":["Tạm khóa","已锁定","red"],"backup_status.VERIFIED":["Đã kiểm chứng","已校验","green"],"backup_status.INCONSISTENT":["Không nhất quán","不一致","amber"],"backup_status.FAILED":["Thất bại","失败","red"],"backup_status.RUNNING":["Đang sao lưu","备份中","amber"],"op_state.BLOCKED":["Chờ mục trước","等待前项","amber"],"health.schema_version":["Phiên bản schema","架构版本"],"health.server_version":["Phiên bản máy chủ","服务器版本"],"health.dataset_epoch":["Thế hệ dữ liệu","数据批次"],"health.env":["Môi trường","环境"],"health.temp_props":["Khóa tạm còn sót trong Thuộc tính tập lệnh","脚本属性中残留的临时键"],"health.maintenance":["Bảo trì","维护模式"],"health.triggers":["Trigger đã cài","已安装触发器"],"health.trigger_minutes_24h":["Phút chạy trigger trong 24 giờ","24小时触发器运行分钟数"],"health.last_backup":["Sao lưu gần nhất","最近备份"],"health.mt_paused_until":["Tạm dừng dịch máy đến","机器翻译暂停至"],"health.login_paused_until":["Tạm dừng đăng nhập đến","登录暂停至"],"health.spreadsheet_cells":["Số ô bảng tính (giới hạn 5 triệu)","表格单元格数（上限500万）"],"brand.sub":["Kiểm tra hằng ngày","日常点检"],"nav.scan_qr":["Quét QR máy","扫码点检"],"nav.month":["Bảng tháng","月表"],"nav.pending":["Chờ xử lý","待处理"],"nav.machines":["Thiết bị","设备"],"nav.templates":["Mẫu checksheet","点检模板"],"nav.reports":["Báo cáo","报表"],"qr_foreign":["Mã này không phải tem thiết bị M&E","此码不是M&E设备标签"],"qr_unavailable":["Không tìm thấy máy này (hoặc không thuộc khu vực của bạn). Thử Đồng bộ ngay.","未找到该设备（或不属于您的区域）。请尝试立即同步。"],"level.1":["Tra cứu","查询"],"level.2":["Người kiểm","点检员"],"level.3":["Trưởng bộ phận","部门主管"],"level.4":["Quản trị","管理员"],"btn.delete":["Xóa","删除"],"form.fix_errors":["Kiểm tra lại các ô báo đỏ","请检查标红的项目"],"field.number_bad":["Nhập số, ví dụ 5,4","请输入数字，如5,4"],"account.scan_hint":["Quét tem QR M&E đang dán trên máy để mở đúng phiếu kiểm của máy đó","扫描设备上已贴的M&E二维码，直接打开该设备的点检表"],"account.areas":["Khu vực phụ trách","负责区域"],"account.work":["Công việc","工作"],"action.check.submit":["Lượt kiểm","点检记录"],"action.doc.upload":["Ảnh kiểm tra","点检照片"],"conflict.help_run":["Lượt kiểm này đã được người khác sửa trên máy chủ trước khi bản của bạn gửi lên. Chọn giữ bản máy chủ (bỏ bản của bạn) hoặc gửi bản của bạn đè lên bản mới nhất.","该点检在您的版本上传前已被他人在服务器上修改。请选择保留服务器版本（放弃您的版本），或用您的版本覆盖最新版本。"],"conflict.mine_on_top":["Gửi bản của tôi lên bản mới nhất","用我的版本覆盖最新版本"],"weekday.1":["Thứ Hai","星期一"],"weekday.2":["Thứ Ba","星期二"],"weekday.3":["Thứ Tư","星期三"],"weekday.4":["Thứ Năm","星期四"],"weekday.5":["Thứ Sáu","星期五"],"weekday.6":["Thứ Bảy","星期六"],"weekday.7":["Chủ nhật","星期日"],"wd_short.1":["T2","一"],"wd_short.2":["T3","二"],"wd_short.3":["T4","三"],"wd_short.4":["T5","四"],"wd_short.5":["T6","五"],"wd_short.6":["T7","六"],"wd_short.7":["CN","日"],"shift.n":["Ca {N}","{N}班"],"shift.name1":["Ca 1","早班"],"shift.name2":["Ca 2","中班"],"shift.name3":["Ca 3","夜班"],"shift.name4":["Ca 4","四班"],"period.week":["Tuần {N}","第{N}周"],"period.month":["Tháng {M}","{M}月"],"freq_each.SHIFT":["Mỗi ca","每班"],"freq_each.DAY":["Mỗi ngày","每天"],"freq_each.WEEK":["Mỗi tuần","每周"],"freq_each.MONTH":["Mỗi tháng","每月"],"state.TODO":["Chưa kiểm","未检","grey"],"state.LOCAL":["Đã lưu trên máy","已存本机","navy"],"state.PARTIAL":["Kiểm dở {N}/{M}","进行中 {N}/{M}","amber"],"state.FAIL":["Không đạt {N}","不合格 {N}","red"],"state.WARN":["Cần chú ý {N}","需关注 {N}","amber"],"state.DONE":["Đạt","合格","green"],"state.OFF_SHIFT":["Không kiểm ca này","本班不检","grey"],"state.MISSED":["Bỏ sót","漏检","grey"],"state.REASON":["Bỏ sót có lý do","漏检（已说明）","grey"],"state_short.DONE":["Đạt","合格"],"state_short.FAIL":["Không đạt","不合格"],"state_short.WARN":["Cần chú ý","需关注"],"res.OK":["✓ Đạt","合格"],"res.WARN":["! Cần chú ý","需关注"],"res.FAIL":["✕ Không đạt","不合格"],"res.EMPTY":["Chưa nhập","未填"],"res.PASS":["Đạt","合格"],"res.NOT_PASS":["Không đạt","不合格"],"grp.TEMP":["Nhiệt độ","温度"],"grp.PRESS":["Áp suất","压力"],"grp.ELEC":["Điện","电气"],"grp.MECH":["Cơ khí","机械"],"grp.LEVEL":["Mức, lưu lượng","液位/流量"],"grp.QUALITY":["Chất lượng nước, khí","水/气质量"],"grp.VISUAL":["Quan sát, vệ sinh","目视/清洁"],"grp.OTHER":["Khác","其他"],"input_type.NUMBER":["Số đo","数值"],"input_type.THREE_PHASE":["Dòng 3 pha (R/S/T)","三相 (R/S/T)"],"input_type.CHOICE":["Chọn mức","选择"],"input_type.PASS_FAIL":["Đạt / Không đạt","合格/不合格"],"input_type.TEXT":["Ghi chữ","文字"],"std_type.RANGE":["Trong khoảng (min – max)","范围（最小–最大）"],"std_type.MAX":["Không quá (≤ max)","不超过（≤ 最大）"],"std_type.MIN":["Không dưới (≥ min)","不低于（≥ 最小）"],"std_type.TOL":["Định mức ± %","额定值 ± %"],"std_type.NONE":["Chỉ ghi số (không có tiêu chuẩn)","仅记录（无标准）"],"home.today":["Hôm nay","今天"],"home.no_shift":["Ngoài giờ ca","非班次时间"],"home.left":["Còn {H} giờ {M} phút","剩余 {H} 小时 {M} 分"],"home.ring_unit":["phiếu","张"],"home.ring_aria":["Đã kiểm {N} trên {M} phiếu","已检 {N}/{M} 张"],"home.c_done":["Đã kiểm","已检"],"home.c_todo":["Chưa kiểm","未检"],"home.c_fail":["Không đạt","不合格"],"home.c_warn":["Cần chú ý","需关注"],"home.scan":["Quét QR máy để kiểm","扫码点检"],"home.pending_me":["Chờ bạn xử lý","待您处理"],"home.f_todo":["Chưa kiểm","未检"],"home.f_fail":["Không đạt","不合格"],"home.f_done":["Đã kiểm","已检"],"home.f_all":["Tất cả","全部"],"home.items_n":["{N} mục","{N}项"],"home.last":["Lần trước","上次"],"home.local_wait":["Đã lưu trên máy, chờ gửi","已存本机，待上传"],"home.left_n":["{N} phiếu chưa kiểm","{N}张未检"],"home.no_area":["Chưa có khu vực","未分区域"],"home.all_done":["Đã kiểm hết kỳ này. Tốt lắm!","本期已全部点检完成！"],"home.none_filter":["Không có mục nào","没有项目"],"home.no_assign":["Chưa có máy nào được gán mẫu checksheet trong khu vực của bạn. Báo Trưởng bộ phận.","您的区域内尚无设备分配点检模板，请联系部门主管。"],"home.no_assign_c3":["Chưa có máy nào được gán mẫu checksheet. Vào Thiết bị hoặc Mẫu checksheet để gán.","尚无设备分配点检模板。请到设备或点检模板中分配。"],"home.off_shift_n":["{N} phiếu không kiểm ca này (xem ở Tất cả)","{N}张本班不检（在“全部”中查看）"],"check.title":["Kiểm tra máy","设备点检"],"check.template":["Mẫu","模板"],"check.machine":["Máy","设备"],"check.change_period":["Đổi kỳ","更改周期"],"check.work_date":["Ngày làm việc","工作日"],"check.shift":["Ca","班次"],"check.period_hint":["Ghi bù được kỳ trong {N} ngày gần nhất (ca 3 qua nửa đêm tính vào ngày bắt đầu ca)","可补录最近{N}天内的周期（跨午夜的夜班计入开始日期）"],"check.no_period":["Mẫu này chưa có kỳ kiểm nào","该模板暂无点检周期"],"check.no_items":["Mẫu chưa có hạng mục","模板暂无项目"],"check.off_shift":["Giờ này không thuộc ca của mẫu — đang mở ca gần nhất của mẫu. Bấm Đổi kỳ để chọn ca khác.","当前时间不在该模板的班次内，已打开最近的班次。点击“更改周期”可选择其他班次。"],"check.queued_note":["Phiếu này đã lưu trên máy, chờ gửi lên máy chủ. Sửa và Lưu lại vẫn được.","此点检已存本机，待上传服务器。仍可修改后再次保存。"],"check.editing":["Kỳ này đã có lượt kiểm — bạn đang sửa lượt đó","本周期已有点检记录，您正在修改该记录"],"check.ro_level":["Bạn chỉ có quyền xem","您只有查看权限"],"check.ro_locked":["Ngày này đã được Trưởng bộ phận xác nhận — không sửa được nữa","该日已由部门主管确认，不能再修改"],"check.ro_others":["Kỳ này người khác đã kiểm — chỉ xem (Trưởng bộ phận sửa được)","本周期已由他人点检，仅可查看（部门主管可修改）"],"check.ro_old":["Kỳ này đã quá hạn ghi bù","本周期已超过补录期限"],"check.ro_inactive":["Máy hoặc mẫu đã ngừng dùng — chỉ xem","设备或模板已停用，仅可查看"],"chk.std":["Tiêu chuẩn","标准"],"chk.warn_at":["chú ý","关注"],"chk.own_std":["tiêu chuẩn riêng của máy","本机专用标准"],"chk.prev":["Lần trước","上次"],"chk.no_std":["Không có tiêu chuẩn — chỉ ghi số","无标准，仅记录"],"chk.measure":["Số đo","测量值"],"chk.phase":["Pha {P}","{P}相"],"chk.imb":["Lệch pha (app tự tính)","三相不平衡（自动计算）"],"chk.how":["Cách kiểm","方法"],"chk.note":["Ghi chú","备注"],"chk.note_required":["Ghi chú bắt buộc","必填备注"],"chk.add_note":["Ghi chú","备注"],"chk.photo":["Chụp ảnh","拍照"],"chk.photo_n":["{N} ảnh sẽ gửi khi lưu","{N}张照片将随保存上传"],"chk.photo_max":["Tối đa {N} ảnh mỗi mục","每项最多{N}张照片"],"chk.photo_fail":["Không đọc được ảnh","无法读取照片"],"chk.photos_saved":["{N} ảnh đã lưu","已存{N}张照片"],"chk.tell_c3":["Lưu xong sẽ báo Trưởng bộ phận","保存后通知部门主管"],"chk.bad_number":["Nhập số, ví dụ 5,4","请输入数字，如5,4"],"chk.below":["Thấp hơn tiêu chuẩn {D} {U}","低于标准 {D} {U}"],"chk.above":["Cao hơn tiêu chuẩn {D} {U}","高于标准 {D} {U}"],"chk.near":["Gần giới hạn, theo dõi thêm","接近极限，请关注"],"chk.phase_out":["Có pha ngoài tiêu chuẩn (lệch {P} %)","有相超出标准（不平衡 {P} %）"],"chk.imb_high":["Lệch pha {P} % vượt tiêu chuẩn","三相不平衡 {P} % 超出标准"],"chk.filled":["Đã nhập","已填"],"chk.filled_n":["Đã nhập {N}/{M}","已填 {N}/{M}"],"chk.fail_n":["{N} Không đạt","{N}项不合格"],"chk.warn_n":["{N} Cần chú ý","{N}项需关注"],"chk.left_n":["Còn {N} mục chưa nhập — vẫn lưu được, nhớ kiểm nốt","还有{N}项未填，可先保存，请记得补齐"],"chk.overall_note":["Ghi chú chung","总体备注"],"chk.offline_ok":["Mất mạng vẫn lưu trên máy, có mạng tự gửi","离线也可保存，联网后自动上传"],"chk.need_note":["Mục Không đạt phải ghi chú","不合格项必须填写备注"],"chk.nothing":["Chưa nhập mục nào","尚未填写任何项目"],"chk.saved":["Đã lưu","已保存"],"chk.saved_fail":["Đã lưu — đã báo Trưởng bộ phận các mục Không đạt","已保存，不合格项已通知部门主管"],"month.prev":["Tháng trước","上月"],"month.next":["Tháng sau","下月"],"month.no_machine":["Chưa có máy nào trong khu vực của bạn","您的区域内暂无设备"],"month.no_data":["Tháng này máy chưa có mẫu checksheet hoặc lượt kiểm","本月该设备暂无点检模板或记录"],"month.need_network":["Tháng này không còn trên máy — cần mạng để xem","本月数据不在本机，需联网查看"],"month.from_server":["Dữ liệu tháng cũ lấy từ máy chủ","旧月份数据来自服务器"],"month.missed":["Bỏ sót","漏检"],"month.no_abn":["Không có mục Không đạt","无不合格项"],"month.day_none":["Ngày này không có kỳ kiểm","该日无点检周期"],"month.open_run":["Mở lượt kiểm","打开点检"],"month.backfill":["Kiểm bù","补检"],"month.trend_none":["Chưa có số đo để vẽ","暂无可绘制的数值"],"month.trend_aria":["Biểu đồ {N} số đo trong tháng","本月{N}个测量值的趋势图"],"month.trend_tap":["Chạm vào một điểm để xem số đo","点击数据点查看测量值"],"month.trend_pick":["Bấm vào một dòng số đo trong bảng để xem biểu đồ của hạng mục đó","点击表中的数值行查看该项目的趋势图"],"month.trend_max_phase":["vẽ pha lớn nhất","显示最大相"],"pend.count":["{N} việc chờ xử lý","{N}项待处理"],"pend.n_abn":["{N} mục Không đạt chưa xử lý","{N}项不合格未处理"],"pend.n_missed":["{N} kỳ máy bỏ sót","{N}个漏检周期"],"pend.n_days":["{N} ngày chưa xác nhận","{N}天未确认"],"pend.tab_abn":["Không đạt","不合格"],"pend.tab_missed":["Bỏ sót","漏检"],"pend.tab_days":["Xác nhận ngày","日确认"],"pend.areas":["Khu vực phụ trách","负责区域"],"pend.all_areas":["Mọi khu vực","全部区域"],"pend.value":["Giá trị","数值"],"pend.resolve":["Đã xử lý","已处理"],"pend.resolution":["Cách xử lý","处理方法"],"pend.resolved":["Đã đánh dấu Đã xử lý","已标记为已处理"],"pend.one_lang":["Nhập một thứ tiếng, máy chủ tự dịch thứ tiếng kia","输入一种语言即可，服务器自动翻译"],"pend.write_reason":["Ghi lý do","填写原因"],"pend.reason":["Lý do bỏ sót","漏检原因"],"pend.confirm_day":["Xác nhận ngày","确认该日"],"pend.confirm_hint":["Xác nhận ngày = Trưởng bộ phận đã xem kết quả kiểm của ngày đó. Sau khi xác nhận, lượt kiểm ngày đó khóa sửa.","确认该日 = 部门主管已查看当日点检结果。确认后当日点检记录不可再修改。"],"pend.confirm_q":["Xác nhận kết quả kiểm ngày {D}?","确认 {D} 的点检结果？"],"pend.confirm_lock":["Cần nhập lại PIN. Lượt kiểm của ngày này sẽ khóa sửa.","需重新输入PIN。该日点检记录将不可修改。"],"pend.confirmed":["Đã xác nhận ngày {D}","已确认 {D}"],"pend.day_missed":["Ngày này còn {N} kỳ bỏ sót chưa có lý do","该日还有{N}个漏检周期未说明原因"],"pend.partial_n":["{N} lượt kiểm dở","{N}次未完成"],"pend.none_abn":["Không có mục Không đạt nào chờ xử lý","没有待处理的不合格项"],"pend.none_missed":["Không có máy bỏ sót","没有漏检"],"pend.none_days":["Không có ngày nào chờ xác nhận","没有待确认的日期"],"mac.detail":["Thiết bị","设备"],"mac.search":["Tìm mã, tên máy","搜索设备编号、名称"],"mac.all_areas":["Mọi khu vực","全部区域"],"mac.only_assigned":["Đã gán mẫu","已分配模板"],"mac.only_unassigned":["Chưa gán mẫu","未分配模板"],"mac.only_all":["Tất cả đang dùng","全部在用"],"mac.only_inactive":["Đã ngừng dùng","已停用"],"mac.sync_me":["Cập nhật từ M&E","从M&E更新"],"mac.sync_done":["Đã cập nhật: thêm {A}, sửa {U}, ngừng {D}","已更新：新增{A}，修改{U}，停用{D}"],"mac.sync_unchanged":["Danh sách thiết bị không đổi","设备清单无变化"],"mac.me_last":["Lấy từ M&E lần cuối","最近从M&E获取"],"mac.me_not_linked":["Chưa kết nối M&E (Quản trị → Kết nối M&E)","尚未连接M&E（管理 → 连接M&E）"],"mac.me_hint":["Thiết bị chỉ sửa ở app M&E; app này tự cập nhật mỗi giờ","设备只在M&E中修改，本应用每小时自动更新"],"mac.count":["{N} máy","{N}台"],"mac.none":["Chưa có thiết bị — kết nối M&E để lấy danh sách","暂无设备，请连接M&E获取清单"],"mac.code":["Mã máy","设备编号"],"mac.name":["Tên máy","设备名称"],"mac.model":["Model","型号"],"mac.category":["Loại","类别"],"mac.me_status":["Trạng thái bên M&E","M&E中的状态"],"mac.templates":["Mẫu checksheet đang kiểm","在用点检模板"],"mac.no_tpl":["Chưa gán mẫu","未分配模板"],"mac.no_tpl_c3":["Máy chưa gán mẫu checksheet nào — bấm Gán mẫu","该设备尚未分配点检模板，请点击“分配模板”"],"mac.inactive":["Ngừng dùng","已停用"],"mac.from_me":["Thông tin lấy từ M&E lúc {T}","信息于 {T} 从M&E获取"],"mac.check_now":["Kiểm ngay","立即点检"],"mac.own_std":["Tiêu chuẩn riêng","专用标准"],"mac.own_std_n":["{N} tiêu chuẩn riêng","{N}项专用标准"],"mac.unassign":["Ngừng gán","取消分配"],"mac.unassign_q":["Ngừng kiểm máy này theo mẫu “{T}”? Lượt kiểm cũ vẫn giữ.","停止按模板“{T}”点检该设备？已有记录保留。"],"mac.assign":["Gán mẫu","分配模板"],"mac.assign_none":["Không còn mẫu nào để gán","没有可分配的模板"],"mac.pick_template":["Chọn mẫu checksheet","选择点检模板"],"mac.stopped":["Đã ngừng gán","已取消分配"],"ov.hint":["Chỉ đặt cho máy khác tiêu chuẩn chung của mẫu (vd máy cũ). Bỏ tích = dùng tiêu chuẩn của mẫu.","仅在本机与模板通用标准不同时设置（如旧设备）。不勾选 = 使用模板标准。"],"ov.own":["Dùng tiêu chuẩn riêng","使用专用标准"],"ov.template_std":["Tiêu chuẩn của mẫu","模板标准"],"ov.no_numeric":["Mẫu này không có hạng mục số đo","该模板没有数值项目"],"tpl.new":["Mẫu mới","新建模板"],"tpl.edit":["Sửa mẫu","编辑模板"],"tpl.library":["Thư viện hạng mục","项目库"],"tpl.code":["Mã mẫu","模板编号"],"tpl.name":["Tên mẫu","模板名称"],"tpl.frequency":["Tần suất kiểm","点检频率"],"tpl.shifts":["Kiểm vào các ca","点检班次"],"tpl.note":["Ghi chú của mẫu","模板备注"],"tpl.items":["Hạng mục kiểm","点检项目"],"tpl.machines":["Số máy","设备数"],"tpl.revision":["Phiên bản","版本"],"tpl.machines_n":["{N} máy","{N}台"],"tpl.archived":["Ngừng dùng","已停用","grey"],"tpl.show_archived":["Hiện {N} mẫu ngừng dùng","显示{N}个停用模板"],"tpl.hide_archived":["Ẩn mẫu ngừng dùng","隐藏停用模板"],"tpl.list_hint":["Một mẫu dùng cho nhiều máy cùng loại. Tiêu chuẩn khác cho từng máy đặt ở màn Thiết bị → Tiêu chuẩn riêng.","一个模板可用于多台同类设备。单台设备的不同标准请在设备 → 专用标准中设置。"],"tpl.none":["Chưa có mẫu checksheet — bấm Mẫu mới","暂无点检模板，请点击“新建模板”"],"tpl.revision_hint":["Sửa hạng mục hoặc tiêu chuẩn sẽ tạo phiên bản mới; lượt kiểm cũ giữ tiêu chuẩn lúc kiểm.","修改项目或标准将生成新版本；旧点检记录保留当时的标准。"],"tpl.add_from_lib":["Thêm từ thư viện","从项目库添加"],"tpl.add_blank":["Hạng mục trống","空白项目"],"tpl.add_selected":["Thêm các mục đã chọn","添加所选项目"],"tpl.lib_hint":["Tiêu chuẩn trong thư viện chỉ là ví dụ — sửa theo tài liệu nhà sản xuất của máy","项目库中的标准仅为示例，请按设备制造商资料修改"],"tpl.no_items":["Chưa có hạng mục — thêm từ thư viện hoặc hạng mục trống","暂无项目，请从项目库添加或添加空白项目"],"tpl.shifts_required":["Chọn ít nhất một ca","请至少选择一个班次"],"tpl.items_required":["Mẫu cần ít nhất một hạng mục (tối đa 60)","模板至少需要一个项目（最多60个）"],"tpl.saved_rev":["Đã lưu — phiên bản {N}","已保存，第{N}版"],"tpl.assigned":["Máy đang dùng mẫu này","使用该模板的设备"],"tpl.assigned_none":["Chưa gán cho máy nào","尚未分配给任何设备"],"tpl.assign":["Gán cho máy","分配给设备"],"tpl.assigned_n":["Đã gán cho {N} máy","已分配给{N}台设备"],"tpl.assign_none_left":["Không còn máy nào để gán","没有可分配的设备"],"tpl.archive":["Ngừng dùng mẫu","停用模板"],"tpl.unarchive":["Dùng lại mẫu","重新启用模板"],"tpl.archive_q":["Ngừng dùng mẫu này? Các máy đã gán sẽ không phải kiểm theo mẫu này nữa; lượt kiểm cũ vẫn giữ.","停用该模板？已分配的设备将不再按此模板点检；已有记录保留。"],"tpl.unarchive_q":["Dùng lại mẫu này?","重新启用该模板？"],"tpl.archive_hint":["Không xóa mẫu để giữ lịch sử kiểm; ngừng dùng khi không cần nữa.","为保留点检历史不删除模板，不再使用时停用即可。"],"ie.new_item":["Hạng mục mới","新项目"],"ie.up":["Lên","上移"],"ie.down":["Xuống","下移"],"ie.name_vi":["Tên (tiếng Việt)","名称（越南语）"],"ie.name_zh":["Tên (tiếng Trung)","名称（中文）"],"ie.group":["Nhóm","分组"],"ie.input_type":["Kiểu nhập","填写方式"],"ie.unit":["Đơn vị","单位"],"ie.std_type":["Kiểu tiêu chuẩn","标准类型"],"ie.std_min":["Nhỏ nhất (min)","最小值"],"ie.std_max":["Lớn nhất (max)","最大值"],"ie.std_nominal":["Định mức","额定值"],"ie.std_tol_pct":["Sai lệch cho phép (%)","允许偏差（%）"],"ie.warn_lo":["Cần chú ý khi ≤","≤ 时需关注"],"ie.warn_hi":["Cần chú ý khi ≥","≥ 时需关注"],"ie.imb_max":["Lệch pha tối đa (%)","最大三相不平衡（%）"],"ie.imb_warn":["Cần chú ý khi lệch ≥ (%)","不平衡 ≥ 时需关注（%）"],"ie.choices":["Các mức để chọn (mức nào Đạt / Cần chú ý / Không đạt)","可选等级（合格/需关注/不合格）"],"ie.choice_add":["Thêm mức","添加等级"],"ie.std_text_vi":["Tiêu chuẩn bằng chữ (Việt)","文字标准（越南语）"],"ie.std_text_zh":["Tiêu chuẩn bằng chữ (Trung)","文字标准（中文）"],"ie.how_vi":["Cách kiểm (Việt)","点检方法（越南语）"],"ie.how_zh":["Cách kiểm (Trung)","点检方法（中文）"],"ie.required":["Bắt buộc nhập","必填"],"ie.photo_on_fail":["Nhắc chụp ảnh khi Không đạt","不合格时提醒拍照"],"lib.new":["Hạng mục mới","新建项目"],"lib.edit":["Sửa hạng mục","编辑项目"],"lib.hint":["Thư viện dùng khi tạo mẫu. Sửa thư viện không đổi các mẫu đã tạo.","项目库用于创建模板。修改项目库不影响已建模板。"],"lib.builtin":["có sẵn","内置"],"lib.active":["Đang dùng","启用"],"rp.all_templates":["Mọi mẫu","全部模板"],"rp.pdf":["Tải PDF","下载PDF"],"rp.excel":["Tải Excel","下载Excel"],"rp.pdf_ready":["PDF đã sẵn sàng · {C}","PDF已生成 · {C}"],"rp.excel_ready":["Excel đã sẵn sàng","Excel已生成"],"rp.open_file":["Mở / lưu tệp","打开/保存文件"],"rp.no_logo":["Chưa có logo công ty trên báo cáo.","报表尚未设置公司标志。"],"rp.date":["Ngày","日期"],"rp.missed_reasons":["Kỳ bỏ sót và lý do","漏检及原因"],"admin.shifts":["Giờ ca","班次时间"],"admin.me_link":["Kết nối M&E","连接M&E"],"admin.sample":["Dữ liệu mẫu","示例数据"],"adm.user.level_hint":["Người kiểm: nhập checksheet · Trưởng bộ phận: xử lý Không đạt, xác nhận ngày, sửa mẫu · Quản trị: người dùng, cấu hình","点检员：填写点检 · 部门主管：处理不合格、确认、编辑模板 · 管理员：用户、配置"],"adm.user.areas_hint":["Không chọn khu vực nào = phụ trách mọi khu vực","不选择区域 = 负责全部区域"],"adm.user.no_areas":["Chưa có khu vực (lấy từ M&E)","暂无区域（来自M&E）"],"adm.user.levels_note":["Mỗi người chỉ thấy máy trong khu vực phụ trách","每人只能看到负责区域内的设备"],"adm.audit.all":["Mọi thao tác","全部操作"],"audit_grp.check":["Lượt kiểm","点检"],"audit_grp.abnormal":["Xử lý Không đạt","不合格处理"],"audit_grp.missed":["Lý do bỏ sót","漏检原因"],"audit_grp.day":["Xác nhận ngày","日确认"],"audit_grp.template":["Mẫu checksheet","点检模板"],"audit_grp.library":["Thư viện hạng mục","项目库"],"audit_grp.assignment":["Gán mẫu cho máy","模板分配"],"audit_grp.machine":["Cập nhật thiết bị","设备更新"],"audit_grp.user":["Người dùng","用户"],"audit_grp.settings":["Cấu hình","配置"],"audit_grp.me":["Kết nối M&E","M&E连接"],"audit_grp.report":["Logo báo cáo","报表标志"],"audit_grp.backup":["Sao lưu","备份"],"health.me_link":["Kết nối M&E (lấy thiết bị mỗi giờ)","M&E连接（每小时获取设备）"],"health.machines":["Thiết bị đang dùng / tổng","在用设备/总数"],"health.report_logo":["Logo trên báo cáo","报表标志"],"health.app_base_url":["Địa chỉ app","应用地址"],"shf.hint":["Ngày làm việc bắt đầu lúc vào Ca 1. Ca qua nửa đêm (vd 22:00 – 06:00) tính vào ngày bắt đầu ca.","工作日从第1班开始计算。跨午夜的班次（如22:00–06:00）计入开始日期。"],"shf.start":["Bắt đầu","开始"],"shf.end":["Kết thúc","结束"],"shf.add":["Thêm ca","添加班次"],"shf.invalid":["Giờ ca không hợp lệ (giờ bắt đầu và kết thúc phải khác nhau)","班次时间无效（开始与结束时间须不同）"],"shf.note":["Đổi giờ ca không đổi các lượt kiểm đã lưu; mẫu theo ca chọn lại ca nếu bớt ca.","修改班次不影响已保存的点检；减少班次时请重新选择模板班次。"],"melink.state":["Trạng thái kết nối","连接状态"],"melink.linked":["Đã kết nối","已连接","green"],"melink.not_linked":["Chưa kết nối","未连接","amber"],"melink.url":["Link /exec của máy chủ M&E","M&E服务器 /exec 链接"],"melink.key":["Mã kết nối (tạo bên M&E)","连接码（在M&E中生成）"],"melink.how_often":["Checksheet tự lấy danh sách thiết bị và khu vực từ M&E mỗi giờ (chỉ đọc, không sửa gì bên M&E).","点检表每小时自动从M&E获取设备与区域清单（只读，不修改M&E）。"],"melink.set":["Kết nối với M&E","连接M&E"],"melink.change":["Đổi kết nối","更改连接"],"melink.step1":["Mở trình soạn Apps Script của máy chủ M&E (cùng THỬ hoặc cùng THẬT), chạy hàm adminCreateFeedKey, chép mã kết nối trong Nhật ký thực thi.","打开M&E服务器的Apps Script编辑器（测试对测试、正式对正式），运行 adminCreateFeedKey，复制执行日志中的连接码。"],"melink.step2":["Chép link /exec của máy chủ M&E (link đang dán trong app M&E).","复制M&E服务器的 /exec 链接（即M&E应用中使用的链接）。"],"melink.step3":["Dán cả hai vào đây rồi bấm Lưu và lấy danh sách — app thử lấy danh sách thiết bị trước khi lưu.","将两者粘贴到此处并点击“保存并获取清单”，应用会先尝试获取设备清单再保存。"],"melink.test_save":["Lưu và lấy danh sách","保存并获取清单"],"melink.url_bad":["Link phải có dạng https://script.google.com/macros/s/…/exec","链接格式须为 https://script.google.com/macros/s/…/exec"],"melink.key_bad":["Mã kết nối quá ngắn — chép đủ cả dòng","连接码太短，请完整复制"],"melink.ok":["Đã kết nối M&E — {N} thiết bị","已连接M&E，共{N}台设备"],"sample.what":["Tạo 3 khu vực, 5 máy, 3 mẫu checksheet (theo ca, ngày, tuần), gán mẫu và 3 tài khoản mẫu để thử app.","创建3个区域、5台设备、3个点检模板（每班、每天、每周）、模板分配及3个示例账户，用于试用。"],"sample.note":["Chỉ có ở máy chủ THỬ. Khi đã kết nối M&E, lần cập nhật sau sẽ ngừng các máy mẫu không có bên M&E.","仅测试服务器可用。连接M&E后，下次更新会停用M&E中不存在的示例设备。"],"sample.run":["Tạo dữ liệu mẫu","创建示例数据"],"sample.done":["Đã tạo {M} máy, {T} mẫu checksheet","已创建{M}台设备、{T}个点检模板"],"sample.already":["Đã có dữ liệu mẫu","示例数据已存在"],"sample.pins":["PIN tạm của tài khoản mẫu (đổi khi đăng nhập lần đầu, chỉ hiện một lần):","示例账户临时PIN（首次登录时修改，仅显示一次）："],"ie.collapse":["Thu gọn","收起"],"auth.reauth":["Nhập lại PIN để tiếp tục","请重新输入PIN以继续"],"melink.fail_title":["Không lấy được danh sách thiết bị từ M&E","无法从M&E获取设备清单"],"melink.reason":["Mã lỗi","错误代码"],"melink.fail_forbidden":["M&E từ chối. Thường do: (1) mã kết nối sai hoặc thiếu ký tự — chạy lại adminCreateFeedKey bên M&E và chép đủ; hoặc (2) máy chủ M&E chưa chạy bản mới 1.0.0-d4.12 — bên M&E dán Code.gs mới, Lưu, rồi Triển khai → Quản lý các bản triển khai → bút chì → Phiên bản mới → Triển khai.","M&E拒绝。通常原因：(1) 连接码错误或不完整——在M&E重新运行 adminCreateFeedKey 并完整复制；或 (2) M&E服务器尚未运行新版本 1.0.0-d4.12——在M&E粘贴新 Code.gs，保存，然后 部署 → 管理部署 → 编辑 → 新版本 → 部署。"],"melink.fail_url":["Link không trả lời đúng: kiểm tra đây là link /exec của máy chủ M&E (Triển khai → Quản lý các bản triển khai → URL ứng dụng web) và web app M&E cho phép Bất kỳ ai truy cập.","链接响应不正确：请确认这是M&E服务器的 /exec 链接（部署 → 管理部署 → 网页应用URL），且M&E网页应用允许任何人访问。"],"melink.fail_perm":["Máy chủ Checksheet chưa được cấp quyền kết nối ra ngoài: trong dự án CS_MayChu_THU chọn hàm adminSyncMachinesNow → Chạy → cho phép quyền, rồi thử lại.","点检表服务器尚未获得外部连接权限：在 CS_MayChu_THU 项目中选择 adminSyncMachinesNow → 运行 → 授权，然后重试。"],"melink.fail_other":["Lỗi khác — chụp màn hình gửi Claude (che mã kết nối).","其他错误——截图发给Claude（遮住连接码）。"],"nav.today":["Kiểm tra","点检"],"today.title":["Kiểm tra hôm nay","今日点检"],"tile.today":["Kiểm tra hôm nay","今日点检"],"tile.month":["Bảng tháng","月表"],"tile.pending":["Chờ xử lý","待处理"],"tile.machines":["Thiết bị","设备"],"tile.templates":["Mẫu checksheet","点检模板"],"tile.library":["Thư viện hạng mục","项目库"],"tile.reports":["Báo cáo","报表"],"tile.drafts":["Nháp chờ gửi","待同步"],"home.week":["Tuần này","本周"],"home.wk_plan":["Số phiếu phải kiểm","应检张数"],"home.wk_left":["còn {N}","剩{N}"],"home.all_done_short":["Đã kiểm hết","已全部点检"],"home.fail_n":["{N} Không đạt","{N}项不合格"],"home.none_pending":["Không có việc chờ","无待办"],"home.none_drafts":["Không có nháp","无草稿"],"home.today_table":["Phiếu kỳ này","本期点检表"],"home.col_period":["Kỳ","周期"],"tpl.count":["{N} mẫu","{N}个模板"],"tile.history":["Lịch sử kiểm","点检记录"],"hist.title":["Lịch sử kiểm","点检记录"],"hist.n7":["{N} lượt / 7 ngày","7天{N}次"],"hist.checked_at":["Lúc kiểm","点检时间"],"hist.fail_items":["Mục Không đạt","不合格项"],"hist.partial":["Kiểm dở","未完成"],"hist.search":["Tìm mã, tên máy, người kiểm","搜索设备编号、名称、点检人"],"hist.window":["Lượt kiểm từ {D} (cũ hơn xem ở Bảng tháng / Báo cáo)","自 {D} 起的点检（更早请看月表/报表）"],"hist.queued_n":["{N} lượt đang chờ gửi (xem Nháp chờ gửi)","{N}次待上传（见待同步）"],"hist.none":["Chưa có lượt kiểm nào","暂无点检记录"],"melink.url_self":["Đây là link của chính Checksheet — cần dán link /exec của máy chủ M&E (link đang dùng trong app M&E)","这是点检表自己的链接——请粘贴M&E服务器的 /exec 链接（M&E应用中使用的链接）"],"mac.saving":["Đang lưu…","保存中…"],"mac.assigned_ok":["Đã gán mẫu “{T}”","已分配模板“{T}”"],"tpl.assigning":["Đang gán cho {N} máy…","正在分配给{N}台设备…"]};
+var LABELS = {"rpt.title":["Phiếu kiểm tra thiết bị","设备点检表"],"rpt.machine":["Thiết bị","设备"],"rpt.area":["Khu vực","区域"],"rpt.month":["Tháng","月份"],"rpt.number":["Số","编号"],"rpt.form_code":["Mã biểu mẫu","表单编号"],"rpt.generated_at":["Lập lúc","编制时间"],"rpt.prepared_by":["Người lập","编制"],"rpt.approved_by":["Trưởng bộ phận","部门主管"],"rpt.sign_hint":["Ký, ghi rõ họ tên","签名"],"rpt.col_item":["Hạng mục","项目"],"rpt.col_std":["Tiêu chuẩn","标准"],"rpt.row_checker":["Người kiểm","点检人"],"rpt.row_confirm":["Trưởng BP xác nhận","主管确认"],"rpt.shift":["Ca {N}","{N}班"],"rpt.revision":["phiên bản {N}","第{N}版"],"rpt.tile_runs":["Lượt kiểm","点检次数"],"rpt.tile_rate":["Hoàn thành","完成率"],"rpt.tile_fail":["Không đạt","不合格"],"rpt.tile_warn":["Cần chú ý","需关注"],"rpt.legend":["Số = giá trị đo; ✓ Đạt; nền vàng = Cần chú ý; nền đỏ = Không đạt; – = bỏ sót; ô trống = chưa tới kỳ","数值=测量值；✓ 合格；黄底=需关注；红底=不合格；– =漏检；空白=未到期"],"rpt.checkers":["Người kiểm","点检人"],"rpt.abnormals":["Bất thường và xử lý","异常与处理"],"rpt.col_date":["Ngày","日期"],"rpt.col_value":["Kết quả","结果"],"rpt.col_note":["Ghi chú","备注"],"rpt.col_resolution":["Xử lý","处理"],"rpt.col_status":["Trạng thái","状态"],"rpt.no_abnormals":["Không có bất thường trong tháng","本月无异常"],"rpt.missed_reasons":["Lý do bỏ sót","漏检原因"],"rpt.col_reason":["Lý do","原因"],"rpt.col_by":["Người ghi","记录人"],"freq.SHIFT":["Mỗi ca","每班"],"freq.DAY":["Mỗi ngày","每日"],"freq.WEEK":["Mỗi tuần","每周"],"freq.MONTH":["Mỗi tháng","每月"],"abn_status.OPEN":["Chưa xử lý","未处理","red"],"abn_status.RESOLVED":["Đã xử lý","已处理","green"],"abn_status.CANCELLED":["Đã hủy","已取消","grey"],"field.no_records":["Chưa có dữ liệu","暂无数据"],"account.add_home":["Thêm app vào Màn hình chính: trong Safari bấm Chia sẻ → Thêm vào MH chính","将应用添加到主屏幕：在Safari中点击分享→添加到主屏幕"],"account.admin":["Quản trị","管理"],"account.api_version":["Phiên bản API","API版本"],"account.app_version":["Phiên bản app","应用版本"],"account.display_name":["Tên hiển thị","显示名称"],"account.expires":["Hết hạn","到期"],"account.guide":["Hướng dẫn","使用指南"],"account.info":["Thông tin","信息"],"account.issued":["Đăng nhập lúc","登录时间"],"account.last_seen":["Hoạt động gần nhất","最近活动"],"account.level":["Cấp","级别"],"account.profile":["Hồ sơ","个人资料"],"account.security":["Bảo mật","安全"],"account.server_version":["Phiên bản máy chủ","服务器版本"],"account.sessions":["Phiên đăng nhập","登录会话"],"account.sync":["Đồng bộ","同步"],"account.this_device":["Máy này","本机"],"adm.audit.after":["Sau","修改后"],"adm.audit.before":["Trước","修改前"],"adm.audit.from":["Từ ngày","从"],"adm.audit.more":["Còn nữa — thu hẹp bộ lọc để xem thêm","还有更多——请缩小筛选范围"],"adm.audit.to":["Đến ngày","至"],"adm.audit.user":["Người làm","操作人"],"adm.backup.docs":["Tài liệu","文件"],"adm.backup.last":["Lần sao lưu gần nhất","最近一次备份"],"adm.backup.no_manifest":["Không có manifest.json: lần chạy bị dừng giữa chừng, xem Lần thực thi trong Apps Script","缺少manifest.json：运行中途停止，请查看Apps Script执行记录"],"adm.backup.none":["Chưa có bản sao lưu","暂无备份"],"adm.backup.note":["Tự động hằng tuần ({D}, {H}:00), giữ {N} bản đã kiểm chứng. Khôi phục làm thủ công theo hướng dẫn","每周自动备份（{D} {H}:00），保留{N}份已校验备份。恢复需按指南手动操作"],"adm.backup.queued":["Đang chờ sao lưu, màn tự cập nhật…","等待备份中，页面自动刷新…"],"adm.backup.retry":["Chạy lại sau ghi đồng thời","因同时写入而重跑"],"adm.backup.rows":["Số dòng","行数"],"adm.backup.running":["Đang sao lưu (thường 1–3 phút), màn tự cập nhật…","正在备份（通常1–3分钟），页面自动刷新…"],"adm.status.base_mismatch":["Khác địa chỉ app đang dùng ({U})","与当前应用地址不同（{U}）"],"adm.status.checked_at":["Kiểm lúc {T}","检查于{T}"],"adm.status.default":["Mặc định","默认"],"adm.status.edit_setting":["Sửa cấu hình","修改设置"],"adm.status.ok":["Đạt","正常","green"],"adm.status.readonly":["Chỉ đọc","只读","grey"],"adm.status.settings":["Cấu hình","系统设置"],"adm.status.warn":["Cảnh báo","警告","amber"],"adm.user.add":["Thêm người dùng","新增用户"],"adm.user.code":["Mã nhân viên","员工编号"],"adm.user.confirm_reset":["Cấp PIN tạm mới? PIN cũ hết dùng, mọi phiên bị thu hồi","发放新的临时PIN？旧PIN失效，所有会话将被撤销"],"adm.user.confirm_revoke":["Thu hồi mọi phiên của người này? Họ phải đăng nhập lại","撤销该用户的所有会话？该用户需重新登录"],"adm.user.email":["Email (không bắt buộc)","邮箱（可选）"],"adm.user.hide_locked":["Ẩn tài khoản đã khóa","隐藏已锁定的账号"],"adm.user.last_login":["Đăng nhập cuối","最近登录"],"adm.user.owner_note":["Chủ hệ thống: chỉ chủ hệ thống thao tác được","系统所有者：仅系统所有者可操作"],"adm.user.pin_locked":["Đang khóa do nhập sai PIN","因输错PIN被锁定","amber"],"adm.user.role_note":["Đổi cấp hoặc vai trò làm mọi phiên của người này hết hiệu lực","修改级别或岗位后，该用户所有会话失效"],"adm.user.self_note":["Tài khoản của bạn: đổi PIN ở trang Tài khoản","这是您的账号：请在账户页修改PIN"],"adm.user.sessions":["Phiên đang mở","在线会话"],"adm.user.show_locked":["Hiện tài khoản đã khóa ({N})","显示已锁定的账号（{N}）"],"adm.user.temp_pin_once":["PIN tạm chỉ hiện một lần. Ghi lại và đưa tận tay người dùng; hạn {H} giờ, đăng nhập xong phải đổi PIN","临时PIN只显示一次。请记下并当面交给用户；有效期{H}小时，登录后必须修改PIN"],"adm.user.temp_pin_title":["PIN tạm","临时PIN"],"adm.user.temp_pin_until":["Hạn PIN tạm","临时PIN到期"],"adm.user.total":["{N} tài khoản","共{N}个账号"],"admin.audit":["Nhật ký thao tác","操作日志"],"admin.backup":["Sao lưu","备份"],"admin.report_logo":["Logo trên báo cáo","报表标志"],"admin.status":["Trạng thái hệ thống","系统状态"],"admin.users":["Người dùng và PIN tạm","用户与临时PIN"],"attempts_left":["Còn {N} lần thử","还可尝试 {N} 次"],"auth.checking_pin":["Đang kiểm tra PIN…","正在验证PIN…"],"auth.expired_offline":["Phiên đã hết hạn: chỉ xem nháp và xuất dự phòng","会话已过期：只能查看草稿和导出备份"],"auth.hello":["Xin chào","你好"],"auth.loading_data":["Đang tải dữ liệu…","正在加载数据…"],"auth.loading_page":["Đang tải dữ liệu (phần {N})…","正在加载数据（第 {N} 部分）…"],"auth.logout_all_confirm":["Mọi phiên, kể cả máy đang dùng, sẽ hết hiệu lực. Dùng khi mất điện thoại.","所有会话（包括本机）将失效。用于手机丢失时。"],"auth.logout_has_drafts":["Còn {N} mục chưa gửi lên máy chủ. Chọn cách xử lý trước khi đăng xuất.","仍有 {N} 条未同步到服务器。退出前请选择处理方式。"],"auth.open_with_pin":["Mở bằng PIN","用PIN打开"],"auth.others_relogin":["Các thiết bị khác phải đăng nhập lại","其他设备需重新登录"],"auth.pin_skip_wait":["Không chờ mạng — mở bằng dữ liệu trên máy","不等网络 — 使用本机数据打开"],"auth.revoked":["Phiên đã bị thu hồi hoặc quyền đã thay đổi","会话已撤销或权限已变更"],"auth.seconds":["{N} giây","{N} 秒"],"auth.server_changed":["App đã chuyển sang máy chủ khác — đăng nhập lại. Nháp chưa gửi của máy chủ cũ nằm ở mục Nháp thế hệ dữ liệu cũ","应用已切换到其他服务器——请重新登录。旧服务器未发送的草稿在“旧数据草稿”中"],"auth.server_slow":["Máy chủ đang phản hồi chậm…","服务器响应较慢…"],"auth.session_warn":["Phiên sắp hết hạn — {D}","会话即将到期 — {D}"],"auth.step_connect":["Kết nối máy chủ","连接服务器"],"auth.step_data":["Cập nhật dữ liệu","更新数据"],"auth.step_open":["Mở trang chủ","打开首页"],"auth.temp_pin_stale":["PIN tạm này không còn dùng được (đã có PIN tạm mới hơn, hoặc quá hạn đổi PIN). Đăng nhập lại bằng PIN tạm mới nhất","此临时PIN已失效（已发放更新的临时PIN或超过修改时限）。请用最新的临时PIN重新登录"],"back":["Quay lại","返回"],"btn.back":["Quay lại","返回"],"btn.backup_now":["Sao lưu ngay","立即备份"],"btn.cancel":["Hủy","取消"],"btn.change_pin":["Đổi PIN","修改PIN"],"btn.close":["Đóng","关闭"],"btn.confirm":["Đúng","确认"],"btn.delete_draft":["Xóa nháp","删除草稿"],"btn.delete_drafts":["Xóa nháp","删除草稿"],"btn.edit":["Sửa","编辑"],"btn.export_backup":["Xuất dự phòng","导出备份"],"btn.filter":["Lọc","筛选"],"btn.keep_drafts":["Giữ nháp trên máy","保留本机草稿"],"btn.lock":["Khóa","锁定"],"btn.logout":["Đăng xuất","退出登录"],"btn.logout_all":["Đăng xuất mọi thiết bị","退出所有设备"],"btn.open":["Mở","打开"],"btn.relogin":["Đăng nhập lại","重新登录"],"btn.reset_pin":["Cấp PIN tạm","发放临时PIN"],"btn.retry":["Thử lại","重试"],"btn.revoke":["Thu hồi","撤销"],"btn.revoke_sessions":["Thu hồi phiên","撤销会话"],"btn.save":["Lưu","保存"],"btn.set_role":["Đổi cấp/vai trò","修改级别/岗位"],"btn.sync_now":["Đồng bộ ngay","立即同步"],"btn.unlock":["Mở khóa","解锁"],"btn.use_server":["Dùng bản máy chủ","采用服务器版本"],"cancel":["Hủy","取消"],"change_pin":["Đổi PIN","修改PIN"],"col.actions":["Thao tác","操作"],"col.status":["Trạng thái","状态"],"conflict.rebased":["Đã gửi lại thay đổi của bạn trên bản máy chủ mới nhất","已在服务器最新版本上重新发送您的修改"],"conflict.title":["Xử lý xung đột","处理冲突"],"conflict.use_server_confirm":["Bỏ thay đổi của bạn và dùng bản máy chủ? Có thể xuất dự phòng trước.","放弃您的修改并采用服务器版本？可先导出备份。"],"current_pin":["PIN hiện tại","当前PIN"],"draft.auto_delete":["Tự xóa sau {N} ngày","{N} 天后自动删除"],"draft.blocked_hint":["Mục trước của cùng lượt kiểm bị từ chối/xung đột; xử lý mục đó trước","同一点检的前一项被拒绝/冲突，请先处理该项"],"draft.created":["Tạo lúc","创建时间"],"draft.delete_all_confirm":["Xóa hẳn {N} nháp chưa gửi? Không lấy lại được.","确定删除 {N} 份未同步草稿？删除后无法恢复。"],"draft.delete_confirm":["Xóa hẳn nháp này? Không lấy lại được.","确定删除此草稿？删除后无法恢复。"],"draft.empty":["Không có mục nào","没有项目"],"draft.error_code":["Mã lỗi","错误代码"],"draft.old_epoch":["Nháp thế hệ dữ liệu cũ","旧数据草稿"],"draft.other_user":["Máy còn {N} nháp của người dùng khác","本机有 {N} 份其他用户的草稿"],"draft.photos":["{N} ảnh","{N} 张照片"],"draft.recent_sent":["Đã gửi lên máy chủ (7 ngày gần nhất)","已同步（最近7天）"],"draft.rejected":["Nháp bị từ chối","被拒草稿"],"draft.sent_at":["Gửi lúc","同步时间"],"draft.size":["Dung lượng","大小"],"draft.title":["Nháp chờ đồng bộ","待同步草稿"],"employee_code":["Mã nhân viên","员工编号"],"env_test":["THỬ","测试"],"err.client":["Lỗi trên máy","本机错误"],"err.forbidden":["Không có quyền","无权限"],"err.not_found":["Không tìm thấy","未找到"],"err.reload_hint":["Nếu vừa có bản mới: bấm để tải lại toàn bộ app. Nháp chưa gửi vẫn giữ trên máy.","如刚更新版本：点击重新加载整个应用。未发送的草稿仍保留在本机。"],"err.reload_new":["Tải lại bản mới","重新加载最新版本"],"field.choose":["— Chọn —","— 请选择 —"],"field.invalid_date":["Ngày không hợp lệ","日期无效"],"field.name":["Tên","名称"],"field.number_ambiguous":["Đã hiểu là {A}. Nếu là số hàng nghìn, gõ liền không dấu (vd 12350)","已识别为 {A}；如为千位数，请连续输入（如 12350）"],"field.number_bad_sep":["Không dùng dấu chấm/phẩy để tách hàng nghìn; gõ 1234567","请勿使用千位分隔符，请输入 1234567"],"field.one_lang":["Chỉ cần nhập một thứ tiếng, máy chủ tự dịch bên kia","只需填写一种语言，服务器自动翻译另一种"],"field.reason":["Lý do","原因"],"field.reason_required":["Bắt buộc nhập lý do","必须填写原因"],"field.required":["Bắt buộc nhập","必填"],"forgot_pin":["Quên PIN","忘记PIN"],"forgot_pin_help":["Liên hệ quản trị để đặt lại PIN","请联系管理员重置密码"],"form.saved":["Đã lưu máy chủ","已同步"],"i18n.check_required":["Tick \"Đã kiểm tra bản dịch\" trước khi lưu","保存前请勾选\"已核对译文\""],"i18n.checked":["Đã kiểm tra bản dịch","已核对译文"],"i18n.lang_vi":["Tiếng Việt","越南语"],"i18n.lang_zh":["Tiếng Trung","中文"],"i18n.suggest":["Gợi ý dịch","翻译建议"],"i18n.suggest_need_one":["Nhập một bên rồi bấm Gợi ý dịch","先填写一种语言再点翻译建议"],"level.owner":["Chủ hệ thống","系统所有者"],"list.more":["Hiện thêm {N} (còn {R})","再显示{N}条（剩余{R}条）"],"locked":["Tạm khóa do nhập sai PIN nhiều lần, thử lại sau {N} phút","因多次输错PIN已暂时锁定，请 {N} 分钟后重试"],"login":["Đăng nhập","登录"],"logo.bad_type":["Chỉ nhận ảnh PNG hoặc JPEG","仅支持PNG或JPEG图片"],"logo.current":["Logo đang dùng","当前标志"],"logo.hint":["Nên dùng ảnh PNG nền trong suốt; app tự thu nhỏ còn tối đa 800 px trước khi gửi","建议使用透明背景PNG；应用发送前自动缩小至最长800像素"],"logo.none":["Chưa có logo — báo cáo in ra không có logo","尚未设置标志——报表不显示标志"],"logo.preview_note":["Xem trước ở cỡ đầu trang PDF","按PDF页眉大小预览"],"logo.remove":["Gỡ logo","移除标志"],"logo.remove_confirm":["Gỡ logo khỏi báo cáo? Báo cáo in sau đó sẽ không có logo.","从报表移除标志？之后打印的报表将不显示标志。"],"logo.removed":["Đã gỡ logo","已移除标志"],"logo.replace":["Đổi logo","更换标志"],"logo.saved":["Đã lưu logo — báo cáo in từ giờ có logo mới","标志已保存——此后打印的报表使用新标志"],"logo.upload":["Chọn ảnh logo","选择标志图片"],"logo.where":["Logo công ty hiện ở đầu mỗi trang PDF phiếu kiểm tra, trên bản xem trước và tệp Excel báo cáo","公司标志显示在点检表PDF每页页眉、报表预览及报表Excel中"],"manual_code":["Mở theo mã","按编号打开"],"menu.title":["Checksheet","点检表"],"nav.account":["Tài khoản","账户"],"nav.home":["Trang chủ","首页"],"nav.scan":["Quét","扫码"],"need_network":["Cần kết nối mạng","需要网络连接"],"network_error":["Không kết nối được máy chủ","无法连接服务器"],"new_pin":["PIN mới","新PIN"],"new_pin_again":["Nhập lại PIN mới","确认新PIN"],"no_reuse_pin":["Không dùng lại PIN của app khác","请勿重复使用其他应用的PIN"],"offline":["Ngoại tuyến","离线"],"offline_unlock":["Mở khóa ngoại tuyến","离线解锁"],"op_state.COMMITTED":["Đã lưu máy chủ","已同步","green"],"open_with_pin":["Mở bằng PIN","用PIN打开"],"pin6":["PIN 6 số","六位数字密码"],"pin_format":["PIN phải gồm đúng 6 chữ số","PIN必须为6位数字"],"pin_mismatch":["Hai lần nhập PIN mới không khớp","两次输入的新PIN不一致"],"qr_inactive":["Máy đã ngừng sử dụng bên M&E","该设备在M&E中已停用"],"safari_tab":["Đang chạy trong Safari: nháp có thể bị xóa sau 7 ngày không mở","在Safari中运行：7天未打开草稿可能被清除"],"same_account":["Dùng cùng tài khoản với iPhone","与iPhone使用同一账户"],"save":["Lưu","保存"],"scan":["Quét QR máy","扫描设备二维码"],"scan_hint":["Đưa tem QR M&E dán trên máy vào khung, hoặc nhập mã máy (vd TB-0007)","将设备上的M&E二维码标签对准框内，或输入设备编号（如TB-0007）"],"server_url":["Địa chỉ máy chủ (/exec)","服务器地址 (/exec)"],"server_url_bad":["Link phải có dạng https://script.google.com/macros/s/…/exec","链接格式应为 https://script.google.com/macros/s/…/exec"],"server_url_missing":["Chưa có địa chỉ máy chủ","尚未设置服务器地址"],"shared_device":["Máy dùng chung","公用设备"],"show_pin":["Hiện PIN","显示PIN"],"sync.committed":["Đã lưu máy chủ","已同步"],"sync.committed_n":["Đã lưu máy chủ: {N} mục","已同步：{N} 条"],"sync.conflict":["Xung đột, cần xử lý","冲突，需处理"],"sync.dataset_reset":["Dữ liệu đã được đặt lại, cần tải lại","数据已重置，需重新加载"],"sync.done":["Đã đồng bộ","同步完成"],"sync.failed":["Lỗi gửi","同步失败"],"sync.last":["Lần đồng bộ cuối","上次同步"],"sync.maintenance":["Bảo trì","维护中"],"sync.need_network":["Cần kết nối mạng","需要网络连接"],"sync.never":["Chưa đồng bộ","尚未同步"],"sync.offline":["Ngoại tuyến","离线"],"sync.online":["Trực tuyến","在线"],"sync.queued":["Chờ gửi","待同步"],"sync.queued_count":["{N} mục chờ gửi","待同步数据 {N} 条"],"sync.safari_tab":["Đang chạy trong Safari: nháp có thể bị xóa sau 7 ngày không mở","在Safari中运行：7天未打开草稿可能被清除"],"sys.maintenance":["Hệ thống đang bảo trì","系统维护中"],"sys.maintenance_over":["Hệ thống đã hết bảo trì","系统维护已结束"],"sys.maintenance_strip":["Hệ thống đang bảo trì — chỉ xem dữ liệu trên máy","系统维护中 — 仅可查看本机数据"],"sys.maintenance_unlock":["Hệ thống đang bảo trì (ví dụ đang Xóa sạch dữ liệu). Chỉ mở được dữ liệu đã có trên máy; bảo trì xong app tự kiểm tra lại.","系统维护中（例如正在清空数据）。仅可打开本机已有数据；维护结束后应用会自动重新检查。"],"tab.calendar":["Lịch","日程"],"tag.env_test":["THỬ","测试"],"tag.machine_translated":["dịch máy","机器翻译"],"tag.no_translation":["Chưa có bản dịch","暂无译文"],"temp_pin":["Bạn đang dùng PIN tạm, hãy đặt PIN mới","您正在使用临时PIN，请设置新PIN"],"unknown_result":["Chưa rõ kết quả, đang hỏi lại máy chủ","结果未知，正在向服务器确认"],"user_status.ACTIVE":["Đang hoạt động","正常","green"],"user_status.DISABLED":["Ngừng dùng","已停用","grey"],"user_status.MUST_CHANGE_PIN":["Phải đổi PIN","需修改PIN","amber"],"op_state.QUEUED":["Chờ gửi","待同步","amber"],"op_state.PREPARED":["Đang gửi","同步中","navy"],"op_state.SENDING":["Đang gửi","同步中","navy"],"op_state.FAILED":["Lỗi gửi","同步失败","red"],"op_state.REJECTED":["Bị từ chối","被拒","red"],"op_state.CONFLICT":["Xung đột","冲突","red"],"op_state.UNKNOWN":["Chưa rõ kết quả","结果未知","amber"],"op_state.UNKNOWN_RESULT":["Chưa rõ kết quả","结果未知","amber"],"user_status.LOCKED":["Tạm khóa","已锁定","red"],"backup_status.VERIFIED":["Đã kiểm chứng","已校验","green"],"backup_status.INCONSISTENT":["Không nhất quán","不一致","amber"],"backup_status.FAILED":["Thất bại","失败","red"],"backup_status.RUNNING":["Đang sao lưu","备份中","amber"],"op_state.BLOCKED":["Chờ mục trước","等待前项","amber"],"health.schema_version":["Phiên bản schema","架构版本"],"health.server_version":["Phiên bản máy chủ","服务器版本"],"health.dataset_epoch":["Thế hệ dữ liệu","数据批次"],"health.env":["Môi trường","环境"],"health.temp_props":["Khóa tạm còn sót trong Thuộc tính tập lệnh","脚本属性中残留的临时键"],"health.maintenance":["Bảo trì","维护模式"],"health.triggers":["Trigger đã cài","已安装触发器"],"health.trigger_minutes_24h":["Phút chạy trigger trong 24 giờ","24小时触发器运行分钟数"],"health.last_backup":["Sao lưu gần nhất","最近备份"],"health.mt_paused_until":["Tạm dừng dịch máy đến","机器翻译暂停至"],"health.login_paused_until":["Tạm dừng đăng nhập đến","登录暂停至"],"health.spreadsheet_cells":["Số ô bảng tính (giới hạn 5 triệu)","表格单元格数（上限500万）"],"brand.sub":["Kiểm tra hằng ngày","日常点检"],"nav.scan_qr":["Quét QR máy","扫码点检"],"nav.month":["Bảng tháng","月表"],"nav.pending":["Chờ xử lý","待处理"],"nav.machines":["Thiết bị","设备"],"nav.templates":["Mẫu checksheet","点检模板"],"nav.reports":["Báo cáo","报表"],"qr_foreign":["Mã này không phải tem thiết bị M&E","此码不是M&E设备标签"],"qr_unavailable":["Không tìm thấy máy này (hoặc không thuộc khu vực của bạn). Thử Đồng bộ ngay.","未找到该设备（或不属于您的区域）。请尝试立即同步。"],"level.1":["Tra cứu","查询"],"level.2":["Người kiểm","点检员"],"level.3":["Trưởng bộ phận","部门主管"],"level.4":["Quản trị","管理员"],"btn.delete":["Xóa","删除"],"form.fix_errors":["Kiểm tra lại các ô báo đỏ","请检查标红的项目"],"field.number_bad":["Nhập số, ví dụ 5,4","请输入数字，如5,4"],"account.scan_hint":["Quét tem QR M&E đang dán trên máy để mở đúng phiếu kiểm của máy đó","扫描设备上已贴的M&E二维码，直接打开该设备的点检表"],"account.areas":["Khu vực phụ trách","负责区域"],"account.work":["Công việc","工作"],"action.check.submit":["Lượt kiểm","点检记录"],"action.doc.upload":["Ảnh kiểm tra","点检照片"],"conflict.help_run":["Lượt kiểm này đã được người khác sửa trên máy chủ trước khi bản của bạn gửi lên. Chọn giữ bản máy chủ (bỏ bản của bạn) hoặc gửi bản của bạn đè lên bản mới nhất.","该点检在您的版本上传前已被他人在服务器上修改。请选择保留服务器版本（放弃您的版本），或用您的版本覆盖最新版本。"],"conflict.mine_on_top":["Gửi bản của tôi lên bản mới nhất","用我的版本覆盖最新版本"],"weekday.1":["Thứ Hai","星期一"],"weekday.2":["Thứ Ba","星期二"],"weekday.3":["Thứ Tư","星期三"],"weekday.4":["Thứ Năm","星期四"],"weekday.5":["Thứ Sáu","星期五"],"weekday.6":["Thứ Bảy","星期六"],"weekday.7":["Chủ nhật","星期日"],"wd_short.1":["T2","一"],"wd_short.2":["T3","二"],"wd_short.3":["T4","三"],"wd_short.4":["T5","四"],"wd_short.5":["T6","五"],"wd_short.6":["T7","六"],"wd_short.7":["CN","日"],"shift.n":["Ca {N}","{N}班"],"shift.name1":["Ca 1","早班"],"shift.name2":["Ca 2","中班"],"shift.name3":["Ca 3","夜班"],"shift.name4":["Ca 4","四班"],"period.week":["Tuần {N}","第{N}周"],"period.month":["Tháng {M}","{M}月"],"freq_each.SHIFT":["Mỗi ca","每班"],"freq_each.DAY":["Mỗi ngày","每天"],"freq_each.WEEK":["Mỗi tuần","每周"],"freq_each.MONTH":["Mỗi tháng","每月"],"state.TODO":["Chưa kiểm","未检","grey"],"state.LOCAL":["Đã lưu trên máy","已存本机","navy"],"state.PARTIAL":["Kiểm dở {N}/{M}","进行中 {N}/{M}","amber"],"state.FAIL":["Không đạt {N}","不合格 {N}","red"],"state.WARN":["Cần chú ý {N}","需关注 {N}","amber"],"state.DONE":["Đạt","合格","green"],"state.OFF_SHIFT":["Không kiểm ca này","本班不检","grey"],"state.MISSED":["Bỏ sót","漏检","grey"],"state.REASON":["Bỏ sót có lý do","漏检（已说明）","grey"],"state_short.DONE":["Đạt","合格"],"state_short.FAIL":["Không đạt","不合格"],"state_short.WARN":["Cần chú ý","需关注"],"res.OK":["✓ Đạt","合格"],"res.WARN":["! Cần chú ý","需关注"],"res.FAIL":["✕ Không đạt","不合格"],"res.EMPTY":["Chưa nhập","未填"],"res.PASS":["Đạt","合格"],"res.NOT_PASS":["Không đạt","不合格"],"grp.TEMP":["Nhiệt độ","温度"],"grp.PRESS":["Áp suất","压力"],"grp.ELEC":["Điện","电气"],"grp.MECH":["Cơ khí","机械"],"grp.LEVEL":["Mức, lưu lượng","液位/流量"],"grp.QUALITY":["Chất lượng nước, khí","水/气质量"],"grp.VISUAL":["Quan sát, vệ sinh","目视/清洁"],"grp.OTHER":["Khác","其他"],"input_type.NUMBER":["Số đo","数值"],"input_type.THREE_PHASE":["Dòng 3 pha (R/S/T)","三相 (R/S/T)"],"input_type.CHOICE":["Chọn mức","选择"],"input_type.PASS_FAIL":["Đạt / Không đạt","合格/不合格"],"input_type.TEXT":["Ghi chữ","文字"],"std_type.RANGE":["Trong khoảng (min – max)","范围（最小–最大）"],"std_type.MAX":["Không quá (≤ max)","不超过（≤ 最大）"],"std_type.MIN":["Không dưới (≥ min)","不低于（≥ 最小）"],"std_type.TOL":["Định mức ± %","额定值 ± %"],"std_type.NONE":["Chỉ ghi số (không có tiêu chuẩn)","仅记录（无标准）"],"home.today":["Hôm nay","今天"],"home.no_shift":["Ngoài giờ ca","非班次时间"],"home.left":["Còn {H} giờ {M} phút","剩余 {H} 小时 {M} 分"],"home.ring_unit":["phiếu","张"],"home.ring_aria":["Đã kiểm {N} trên {M} phiếu","已检 {N}/{M} 张"],"home.c_done":["Đã kiểm","已检"],"home.c_todo":["Chưa kiểm","未检"],"home.c_fail":["Không đạt","不合格"],"home.c_warn":["Cần chú ý","需关注"],"home.scan":["Quét QR máy để kiểm","扫码点检"],"home.pending_me":["Chờ bạn xử lý","待您处理"],"home.f_todo":["Chưa kiểm","未检"],"home.f_fail":["Không đạt","不合格"],"home.f_done":["Đã kiểm","已检"],"home.f_all":["Tất cả","全部"],"home.items_n":["{N} mục","{N}项"],"home.last":["Lần trước","上次"],"home.local_wait":["Đã lưu trên máy, chờ gửi","已存本机，待上传"],"home.left_n":["{N} phiếu chưa kiểm","{N}张未检"],"home.no_area":["Chưa có khu vực","未分区域"],"home.all_done":["Đã kiểm hết kỳ này. Tốt lắm!","本期已全部点检完成！"],"home.none_filter":["Không có mục nào","没有项目"],"home.no_assign":["Chưa có máy nào được gán mẫu checksheet trong khu vực của bạn. Báo Trưởng bộ phận.","您的区域内尚无设备分配点检模板，请联系部门主管。"],"home.no_assign_c3":["Chưa có máy nào được gán mẫu checksheet. Vào Thiết bị hoặc Mẫu checksheet để gán.","尚无设备分配点检模板。请到设备或点检模板中分配。"],"home.off_shift_n":["{N} phiếu không kiểm ca này (xem ở Tất cả)","{N}张本班不检（在“全部”中查看）"],"check.title":["Kiểm tra máy","设备点检"],"check.template":["Mẫu","模板"],"check.machine":["Máy","设备"],"check.change_period":["Đổi kỳ","更改周期"],"check.work_date":["Ngày làm việc","工作日"],"check.shift":["Ca","班次"],"check.period_hint":["Ghi bù được kỳ trong {N} ngày gần nhất (ca 3 qua nửa đêm tính vào ngày bắt đầu ca)","可补录最近{N}天内的周期（跨午夜的夜班计入开始日期）"],"check.no_period":["Mẫu này chưa có kỳ kiểm nào","该模板暂无点检周期"],"check.no_items":["Mẫu chưa có hạng mục","模板暂无项目"],"check.off_shift":["Giờ này không thuộc ca của mẫu — đang mở ca gần nhất của mẫu. Bấm Đổi kỳ để chọn ca khác.","当前时间不在该模板的班次内，已打开最近的班次。点击“更改周期”可选择其他班次。"],"check.queued_note":["Phiếu này đã lưu trên máy, chờ gửi lên máy chủ. Sửa và Lưu lại vẫn được.","此点检已存本机，待上传服务器。仍可修改后再次保存。"],"check.editing":["Kỳ này đã có lượt kiểm — bạn đang sửa lượt đó","本周期已有点检记录，您正在修改该记录"],"check.ro_level":["Bạn chỉ có quyền xem","您只有查看权限"],"check.ro_locked":["Ngày này đã được Trưởng bộ phận xác nhận — không sửa được nữa","该日已由部门主管确认，不能再修改"],"check.ro_others":["Kỳ này người khác đã kiểm — chỉ xem (Trưởng bộ phận sửa được)","本周期已由他人点检，仅可查看（部门主管可修改）"],"check.ro_old":["Kỳ này đã quá hạn ghi bù","本周期已超过补录期限"],"check.ro_inactive":["Máy hoặc mẫu đã ngừng dùng — chỉ xem","设备或模板已停用，仅可查看"],"chk.std":["Tiêu chuẩn","标准"],"chk.warn_at":["chú ý","关注"],"chk.own_std":["tiêu chuẩn riêng của máy","本机专用标准"],"chk.prev":["Lần trước","上次"],"chk.no_std":["Không có tiêu chuẩn — chỉ ghi số","无标准，仅记录"],"chk.measure":["Số đo","测量值"],"chk.phase":["Pha {P}","{P}相"],"chk.imb":["Lệch pha (app tự tính)","三相不平衡（自动计算）"],"chk.how":["Cách kiểm","方法"],"chk.note":["Ghi chú","备注"],"chk.note_required":["Ghi chú bắt buộc","必填备注"],"chk.add_note":["Ghi chú","备注"],"chk.photo":["Chụp ảnh","拍照"],"chk.photo_n":["{N} ảnh sẽ gửi khi lưu","{N}张照片将随保存上传"],"chk.photo_max":["Tối đa {N} ảnh mỗi mục","每项最多{N}张照片"],"chk.photo_fail":["Không đọc được ảnh","无法读取照片"],"chk.photos_saved":["{N} ảnh đã lưu","已存{N}张照片"],"chk.tell_c3":["Lưu xong sẽ báo Trưởng bộ phận","保存后通知部门主管"],"chk.bad_number":["Nhập số, ví dụ 5,4","请输入数字，如5,4"],"chk.below":["Thấp hơn tiêu chuẩn {D} {U}","低于标准 {D} {U}"],"chk.above":["Cao hơn tiêu chuẩn {D} {U}","高于标准 {D} {U}"],"chk.near":["Gần giới hạn, theo dõi thêm","接近极限，请关注"],"chk.phase_out":["Có pha ngoài tiêu chuẩn (lệch {P} %)","有相超出标准（不平衡 {P} %）"],"chk.imb_high":["Lệch pha {P} % vượt tiêu chuẩn","三相不平衡 {P} % 超出标准"],"chk.filled":["Đã nhập","已填"],"chk.filled_n":["Đã nhập {N}/{M}","已填 {N}/{M}"],"chk.fail_n":["{N} Không đạt","{N}项不合格"],"chk.warn_n":["{N} Cần chú ý","{N}项需关注"],"chk.left_n":["Còn {N} mục chưa nhập — vẫn lưu được, nhớ kiểm nốt","还有{N}项未填，可先保存，请记得补齐"],"chk.overall_note":["Ghi chú chung","总体备注"],"chk.offline_ok":["Mất mạng vẫn lưu trên máy, có mạng tự gửi","离线也可保存，联网后自动上传"],"chk.need_note":["Mục Không đạt phải ghi chú","不合格项必须填写备注"],"chk.nothing":["Chưa nhập mục nào","尚未填写任何项目"],"chk.saved":["Đã lưu","已保存"],"chk.saved_fail":["Đã lưu — đã báo Trưởng bộ phận các mục Không đạt","已保存，不合格项已通知部门主管"],"month.prev":["Tháng trước","上月"],"month.next":["Tháng sau","下月"],"month.no_machine":["Chưa có máy nào trong khu vực của bạn","您的区域内暂无设备"],"month.no_data":["Tháng này máy chưa có mẫu checksheet hoặc lượt kiểm","本月该设备暂无点检模板或记录"],"month.need_network":["Tháng này không còn trên máy — cần mạng để xem","本月数据不在本机，需联网查看"],"month.from_server":["Dữ liệu tháng cũ lấy từ máy chủ","旧月份数据来自服务器"],"month.missed":["Bỏ sót","漏检"],"month.no_abn":["Không có mục Không đạt","无不合格项"],"month.day_none":["Ngày này không có kỳ kiểm","该日无点检周期"],"month.open_run":["Mở lượt kiểm","打开点检"],"month.backfill":["Kiểm bù","补检"],"month.trend_none":["Chưa có số đo để vẽ","暂无可绘制的数值"],"month.trend_aria":["Biểu đồ {N} số đo trong tháng","本月{N}个测量值的趋势图"],"month.trend_tap":["Chạm vào một điểm để xem số đo","点击数据点查看测量值"],"month.trend_pick":["Bấm vào một dòng số đo trong bảng để xem biểu đồ của hạng mục đó","点击表中的数值行查看该项目的趋势图"],"month.trend_max_phase":["vẽ pha lớn nhất","显示最大相"],"pend.count":["{N} việc chờ xử lý","{N}项待处理"],"pend.n_abn":["{N} mục Không đạt chưa xử lý","{N}项不合格未处理"],"pend.n_missed":["{N} kỳ máy bỏ sót","{N}个漏检周期"],"pend.n_days":["{N} ngày chưa xác nhận","{N}天未确认"],"pend.tab_abn":["Không đạt","不合格"],"pend.tab_missed":["Bỏ sót","漏检"],"pend.tab_days":["Xác nhận ngày","日确认"],"pend.areas":["Khu vực phụ trách","负责区域"],"pend.all_areas":["Mọi khu vực","全部区域"],"pend.value":["Giá trị","数值"],"pend.resolve":["Đã xử lý","已处理"],"pend.resolution":["Cách xử lý","处理方法"],"pend.resolved":["Đã đánh dấu Đã xử lý","已标记为已处理"],"pend.one_lang":["Nhập một thứ tiếng, máy chủ tự dịch thứ tiếng kia","输入一种语言即可，服务器自动翻译"],"pend.write_reason":["Ghi lý do","填写原因"],"pend.reason":["Lý do bỏ sót","漏检原因"],"pend.confirm_day":["Xác nhận ngày","确认该日"],"pend.confirm_hint":["Xác nhận ngày = Trưởng bộ phận đã xem kết quả kiểm của ngày đó. Sau khi xác nhận, lượt kiểm ngày đó khóa sửa.","确认该日 = 部门主管已查看当日点检结果。确认后当日点检记录不可再修改。"],"pend.confirm_q":["Xác nhận kết quả kiểm ngày {D}?","确认 {D} 的点检结果？"],"pend.confirm_lock":["Cần nhập lại PIN. Lượt kiểm của ngày này sẽ khóa sửa.","需重新输入PIN。该日点检记录将不可修改。"],"pend.confirmed":["Đã xác nhận ngày {D}","已确认 {D}"],"pend.day_missed":["Ngày này còn {N} kỳ bỏ sót chưa có lý do","该日还有{N}个漏检周期未说明原因"],"pend.partial_n":["{N} lượt kiểm dở","{N}次未完成"],"pend.none_abn":["Không có mục Không đạt nào chờ xử lý","没有待处理的不合格项"],"pend.none_missed":["Không có máy bỏ sót","没有漏检"],"pend.none_days":["Không có ngày nào chờ xác nhận","没有待确认的日期"],"mac.detail":["Thiết bị","设备"],"mac.search":["Tìm mã, tên máy","搜索设备编号、名称"],"mac.all_areas":["Mọi khu vực","全部区域"],"mac.only_assigned":["Đã gán mẫu","已分配模板"],"mac.only_unassigned":["Chưa gán mẫu","未分配模板"],"mac.only_all":["Tất cả đang dùng","全部在用"],"mac.only_inactive":["Đã ngừng dùng","已停用"],"mac.sync_me":["Cập nhật từ M&E","从M&E更新"],"mac.sync_done":["Đã cập nhật: thêm {A}, sửa {U}, ngừng {D}","已更新：新增{A}，修改{U}，停用{D}"],"mac.sync_unchanged":["Danh sách thiết bị không đổi","设备清单无变化"],"mac.me_last":["Lấy từ M&E lần cuối","最近从M&E获取"],"mac.me_not_linked":["Chưa kết nối M&E (Quản trị → Kết nối M&E)","尚未连接M&E（管理 → 连接M&E）"],"mac.me_hint":["Thiết bị chỉ sửa ở app M&E; app này tự cập nhật mỗi giờ","设备只在M&E中修改，本应用每小时自动更新"],"mac.count":["{N} máy","{N}台"],"mac.none":["Chưa có thiết bị — kết nối M&E để lấy danh sách","暂无设备，请连接M&E获取清单"],"mac.code":["Mã máy","设备编号"],"mac.name":["Tên máy","设备名称"],"mac.model":["Model","型号"],"mac.category":["Loại","类别"],"mac.me_status":["Trạng thái bên M&E","M&E中的状态"],"mac.templates":["Mẫu checksheet đang kiểm","在用点检模板"],"mac.no_tpl":["Chưa gán mẫu","未分配模板"],"mac.no_tpl_c3":["Máy chưa gán mẫu checksheet nào — bấm Gán mẫu","该设备尚未分配点检模板，请点击“分配模板”"],"mac.inactive":["Ngừng dùng","已停用"],"mac.from_me":["Thông tin lấy từ M&E lúc {T}","信息于 {T} 从M&E获取"],"mac.check_now":["Kiểm ngay","立即点检"],"mac.own_std":["Tiêu chuẩn riêng","专用标准"],"mac.own_std_n":["{N} tiêu chuẩn riêng","{N}项专用标准"],"mac.unassign":["Ngừng gán","取消分配"],"mac.unassign_q":["Ngừng kiểm máy này theo mẫu “{T}”? Lượt kiểm cũ vẫn giữ.","停止按模板“{T}”点检该设备？已有记录保留。"],"mac.assign":["Gán mẫu","分配模板"],"mac.assign_none":["Không còn mẫu nào để gán","没有可分配的模板"],"mac.pick_template":["Chọn mẫu checksheet","选择点检模板"],"mac.stopped":["Đã ngừng gán","已取消分配"],"ov.hint":["Chỉ đặt cho máy khác tiêu chuẩn chung của mẫu (vd máy cũ). Bỏ tích = dùng tiêu chuẩn của mẫu.","仅在本机与模板通用标准不同时设置（如旧设备）。不勾选 = 使用模板标准。"],"ov.own":["Dùng tiêu chuẩn riêng","使用专用标准"],"ov.template_std":["Tiêu chuẩn của mẫu","模板标准"],"ov.no_numeric":["Mẫu này không có hạng mục số đo","该模板没有数值项目"],"tpl.new":["Mẫu mới","新建模板"],"tpl.edit":["Sửa mẫu","编辑模板"],"tpl.library":["Thư viện hạng mục","项目库"],"tpl.code":["Mã mẫu","模板编号"],"tpl.name":["Tên mẫu","模板名称"],"tpl.frequency":["Tần suất kiểm","点检频率"],"tpl.shifts":["Kiểm vào các ca","点检班次"],"tpl.note":["Ghi chú của mẫu","模板备注"],"tpl.items":["Hạng mục kiểm","点检项目"],"tpl.machines":["Số máy","设备数"],"tpl.revision":["Phiên bản","版本"],"tpl.machines_n":["{N} máy","{N}台"],"tpl.archived":["Ngừng dùng","已停用","grey"],"tpl.show_archived":["Hiện {N} mẫu ngừng dùng","显示{N}个停用模板"],"tpl.hide_archived":["Ẩn mẫu ngừng dùng","隐藏停用模板"],"tpl.list_hint":["Một mẫu dùng cho nhiều máy cùng loại. Tiêu chuẩn khác cho từng máy đặt ở màn Thiết bị → Tiêu chuẩn riêng.","一个模板可用于多台同类设备。单台设备的不同标准请在设备 → 专用标准中设置。"],"tpl.none":["Chưa có mẫu checksheet — bấm Mẫu mới","暂无点检模板，请点击“新建模板”"],"tpl.revision_hint":["Sửa hạng mục hoặc tiêu chuẩn sẽ tạo phiên bản mới; lượt kiểm cũ giữ tiêu chuẩn lúc kiểm.","修改项目或标准将生成新版本；旧点检记录保留当时的标准。"],"tpl.add_from_lib":["Thêm từ thư viện","从项目库添加"],"tpl.add_blank":["Hạng mục trống","空白项目"],"tpl.add_selected":["Thêm các mục đã chọn","添加所选项目"],"tpl.lib_hint":["Tiêu chuẩn trong thư viện chỉ là ví dụ — sửa theo tài liệu nhà sản xuất của máy","项目库中的标准仅为示例，请按设备制造商资料修改"],"tpl.no_items":["Chưa có hạng mục — thêm từ thư viện hoặc hạng mục trống","暂无项目，请从项目库添加或添加空白项目"],"tpl.shifts_required":["Chọn ít nhất một ca","请至少选择一个班次"],"tpl.items_required":["Mẫu cần ít nhất một hạng mục (tối đa 60)","模板至少需要一个项目（最多60个）"],"tpl.saved_rev":["Đã lưu — phiên bản {N}","已保存，第{N}版"],"tpl.assigned":["Máy đang dùng mẫu này","使用该模板的设备"],"tpl.assigned_none":["Chưa gán cho máy nào","尚未分配给任何设备"],"tpl.assign":["Gán cho máy","分配给设备"],"tpl.assigned_n":["Đã gán cho {N} máy","已分配给{N}台设备"],"tpl.assign_none_left":["Không còn máy nào để gán","没有可分配的设备"],"tpl.archive":["Ngừng dùng mẫu","停用模板"],"tpl.unarchive":["Dùng lại mẫu","重新启用模板"],"tpl.archive_q":["Ngừng dùng mẫu này? Các máy đã gán sẽ không phải kiểm theo mẫu này nữa; lượt kiểm cũ vẫn giữ.","停用该模板？已分配的设备将不再按此模板点检；已有记录保留。"],"tpl.unarchive_q":["Dùng lại mẫu này?","重新启用该模板？"],"tpl.archive_hint":["Không xóa mẫu để giữ lịch sử kiểm; ngừng dùng khi không cần nữa.","为保留点检历史不删除模板，不再使用时停用即可。"],"ie.new_item":["Hạng mục mới","新项目"],"ie.up":["Lên","上移"],"ie.down":["Xuống","下移"],"ie.name_vi":["Tên (tiếng Việt)","名称（越南语）"],"ie.name_zh":["Tên (tiếng Trung)","名称（中文）"],"ie.group":["Nhóm","分组"],"ie.input_type":["Kiểu nhập","填写方式"],"ie.unit":["Đơn vị","单位"],"ie.std_type":["Kiểu tiêu chuẩn","标准类型"],"ie.std_min":["Nhỏ nhất (min)","最小值"],"ie.std_max":["Lớn nhất (max)","最大值"],"ie.std_nominal":["Định mức","额定值"],"ie.std_tol_pct":["Sai lệch cho phép (%)","允许偏差（%）"],"ie.warn_lo":["Cần chú ý khi ≤","≤ 时需关注"],"ie.warn_hi":["Cần chú ý khi ≥","≥ 时需关注"],"ie.imb_max":["Lệch pha tối đa (%)","最大三相不平衡（%）"],"ie.imb_warn":["Cần chú ý khi lệch ≥ (%)","不平衡 ≥ 时需关注（%）"],"ie.choices":["Các mức để chọn (mức nào Đạt / Cần chú ý / Không đạt)","可选等级（合格/需关注/不合格）"],"ie.choice_add":["Thêm mức","添加等级"],"ie.std_text_vi":["Tiêu chuẩn bằng chữ (Việt)","文字标准（越南语）"],"ie.std_text_zh":["Tiêu chuẩn bằng chữ (Trung)","文字标准（中文）"],"ie.how_vi":["Cách kiểm (Việt)","点检方法（越南语）"],"ie.how_zh":["Cách kiểm (Trung)","点检方法（中文）"],"ie.required":["Bắt buộc nhập","必填"],"ie.photo_on_fail":["Nhắc chụp ảnh khi Không đạt","不合格时提醒拍照"],"lib.new":["Hạng mục mới","新建项目"],"lib.edit":["Sửa hạng mục","编辑项目"],"lib.hint":["Thư viện dùng khi tạo mẫu. Sửa thư viện không đổi các mẫu đã tạo.","项目库用于创建模板。修改项目库不影响已建模板。"],"lib.builtin":["có sẵn","内置"],"lib.active":["Đang dùng","启用"],"rp.all_templates":["Mọi mẫu","全部模板"],"rp.pdf":["Tải PDF","下载PDF"],"rp.excel":["Tải Excel","下载Excel"],"rp.pdf_ready":["PDF đã sẵn sàng · {C}","PDF已生成 · {C}"],"rp.excel_ready":["Excel đã sẵn sàng","Excel已生成"],"rp.open_file":["Mở / lưu tệp","打开/保存文件"],"rp.no_logo":["Chưa có logo công ty trên báo cáo.","报表尚未设置公司标志。"],"rp.date":["Ngày","日期"],"rp.missed_reasons":["Kỳ bỏ sót và lý do","漏检及原因"],"admin.shifts":["Giờ ca","班次时间"],"admin.me_link":["Kết nối M&E","连接M&E"],"admin.sample":["Dữ liệu mẫu","示例数据"],"adm.user.level_hint":["Người kiểm: nhập checksheet · Trưởng bộ phận: xử lý Không đạt, xác nhận ngày, sửa mẫu · Quản trị: người dùng, cấu hình","点检员：填写点检 · 部门主管：处理不合格、确认、编辑模板 · 管理员：用户、配置"],"adm.user.areas_hint":["Không chọn khu vực nào = phụ trách mọi khu vực","不选择区域 = 负责全部区域"],"adm.user.no_areas":["Chưa có khu vực (lấy từ M&E)","暂无区域（来自M&E）"],"adm.user.levels_note":["Mỗi người chỉ thấy máy trong khu vực phụ trách","每人只能看到负责区域内的设备"],"adm.audit.all":["Mọi thao tác","全部操作"],"audit_grp.check":["Lượt kiểm","点检"],"audit_grp.abnormal":["Xử lý Không đạt","不合格处理"],"audit_grp.missed":["Lý do bỏ sót","漏检原因"],"audit_grp.day":["Xác nhận ngày","日确认"],"audit_grp.template":["Mẫu checksheet","点检模板"],"audit_grp.library":["Thư viện hạng mục","项目库"],"audit_grp.assignment":["Gán mẫu cho máy","模板分配"],"audit_grp.machine":["Cập nhật thiết bị","设备更新"],"audit_grp.user":["Người dùng","用户"],"audit_grp.settings":["Cấu hình","配置"],"audit_grp.me":["Kết nối M&E","M&E连接"],"audit_grp.report":["Logo báo cáo","报表标志"],"audit_grp.backup":["Sao lưu","备份"],"health.me_link":["Kết nối M&E (lấy thiết bị mỗi giờ)","M&E连接（每小时获取设备）"],"health.machines":["Thiết bị đang dùng / tổng","在用设备/总数"],"health.report_logo":["Logo trên báo cáo","报表标志"],"health.app_base_url":["Địa chỉ app","应用地址"],"shf.hint":["Ngày làm việc bắt đầu lúc vào Ca 1. Ca qua nửa đêm (vd 22:00 – 06:00) tính vào ngày bắt đầu ca.","工作日从第1班开始计算。跨午夜的班次（如22:00–06:00）计入开始日期。"],"shf.start":["Bắt đầu","开始"],"shf.end":["Kết thúc","结束"],"shf.add":["Thêm ca","添加班次"],"shf.invalid":["Giờ ca không hợp lệ (giờ bắt đầu và kết thúc phải khác nhau)","班次时间无效（开始与结束时间须不同）"],"shf.note":["Đổi giờ ca không đổi các lượt kiểm đã lưu; mẫu theo ca chọn lại ca nếu bớt ca.","修改班次不影响已保存的点检；减少班次时请重新选择模板班次。"],"melink.state":["Trạng thái kết nối","连接状态"],"melink.linked":["Đã kết nối","已连接","green"],"melink.not_linked":["Chưa kết nối","未连接","amber"],"melink.url":["Link /exec của máy chủ M&E","M&E服务器 /exec 链接"],"melink.key":["Mã kết nối (tạo bên M&E)","连接码（在M&E中生成）"],"melink.how_often":["Checksheet tự lấy danh sách thiết bị và khu vực từ M&E mỗi giờ (chỉ đọc, không sửa gì bên M&E).","点检表每小时自动从M&E获取设备与区域清单（只读，不修改M&E）。"],"melink.set":["Kết nối với M&E","连接M&E"],"melink.change":["Đổi kết nối","更改连接"],"melink.step1":["Mở trình soạn Apps Script của máy chủ M&E (cùng THỬ hoặc cùng THẬT), chạy hàm adminCreateFeedKey, chép mã kết nối trong Nhật ký thực thi.","打开M&E服务器的Apps Script编辑器（测试对测试、正式对正式），运行 adminCreateFeedKey，复制执行日志中的连接码。"],"melink.step2":["Chép link /exec của máy chủ M&E (link đang dán trong app M&E).","复制M&E服务器的 /exec 链接（即M&E应用中使用的链接）。"],"melink.step3":["Dán cả hai vào đây rồi bấm Lưu và lấy danh sách — app thử lấy danh sách thiết bị trước khi lưu.","将两者粘贴到此处并点击“保存并获取清单”，应用会先尝试获取设备清单再保存。"],"melink.test_save":["Lưu và lấy danh sách","保存并获取清单"],"melink.url_bad":["Link phải có dạng https://script.google.com/macros/s/…/exec","链接格式须为 https://script.google.com/macros/s/…/exec"],"melink.key_bad":["Mã kết nối quá ngắn — chép đủ cả dòng","连接码太短，请完整复制"],"melink.ok":["Đã kết nối M&E — {N} thiết bị","已连接M&E，共{N}台设备"],"sample.what":["Tạo 3 khu vực, 5 máy, 3 mẫu checksheet (theo ca, ngày, tuần), gán mẫu và 3 tài khoản mẫu để thử app.","创建3个区域、5台设备、3个点检模板（每班、每天、每周）、模板分配及3个示例账户，用于试用。"],"sample.note":["Chỉ có ở máy chủ THỬ. Khi đã kết nối M&E, lần cập nhật sau sẽ ngừng các máy mẫu không có bên M&E.","仅测试服务器可用。连接M&E后，下次更新会停用M&E中不存在的示例设备。"],"sample.run":["Tạo dữ liệu mẫu","创建示例数据"],"sample.done":["Đã tạo {M} máy, {T} mẫu checksheet","已创建{M}台设备、{T}个点检模板"],"sample.already":["Đã có dữ liệu mẫu","示例数据已存在"],"sample.pins":["PIN tạm của tài khoản mẫu (đổi khi đăng nhập lần đầu, chỉ hiện một lần):","示例账户临时PIN（首次登录时修改，仅显示一次）："],"ie.collapse":["Thu gọn","收起"],"auth.reauth":["Nhập lại PIN để tiếp tục","请重新输入PIN以继续"],"melink.fail_title":["Không lấy được danh sách thiết bị từ M&E","无法从M&E获取设备清单"],"melink.reason":["Mã lỗi","错误代码"],"melink.fail_forbidden":["M&E từ chối. Thường do: (1) mã kết nối sai hoặc thiếu ký tự — chạy lại adminCreateFeedKey bên M&E và chép đủ; hoặc (2) máy chủ M&E chưa chạy bản mới 1.0.0-d4.12 — bên M&E dán Code.gs mới, Lưu, rồi Triển khai → Quản lý các bản triển khai → bút chì → Phiên bản mới → Triển khai.","M&E拒绝。通常原因：(1) 连接码错误或不完整——在M&E重新运行 adminCreateFeedKey 并完整复制；或 (2) M&E服务器尚未运行新版本 1.0.0-d4.12——在M&E粘贴新 Code.gs，保存，然后 部署 → 管理部署 → 编辑 → 新版本 → 部署。"],"melink.fail_url":["Link không trả lời đúng: kiểm tra đây là link /exec của máy chủ M&E (Triển khai → Quản lý các bản triển khai → URL ứng dụng web) và web app M&E cho phép Bất kỳ ai truy cập.","链接响应不正确：请确认这是M&E服务器的 /exec 链接（部署 → 管理部署 → 网页应用URL），且M&E网页应用允许任何人访问。"],"melink.fail_perm":["Máy chủ Checksheet chưa được cấp quyền kết nối ra ngoài: trong dự án CS_MayChu_THU chọn hàm adminSyncMachinesNow → Chạy → cho phép quyền, rồi thử lại.","点检表服务器尚未获得外部连接权限：在 CS_MayChu_THU 项目中选择 adminSyncMachinesNow → 运行 → 授权，然后重试。"],"melink.fail_other":["Lỗi khác — chụp màn hình gửi Claude (che mã kết nối).","其他错误——截图发给Claude（遮住连接码）。"],"nav.today":["Kiểm tra","点检"],"today.title":["Kiểm tra hôm nay","今日点检"],"tile.today":["Kiểm tra hôm nay","今日点检"],"tile.month":["Bảng tháng","月表"],"tile.pending":["Chờ xử lý","待处理"],"tile.machines":["Thiết bị","设备"],"tile.templates":["Mẫu checksheet","点检模板"],"tile.library":["Thư viện hạng mục","项目库"],"tile.reports":["Báo cáo","报表"],"tile.drafts":["Nháp chờ gửi","待同步"],"home.week":["Tuần này","本周"],"home.wk_plan":["Số phiếu phải kiểm","应检张数"],"home.wk_left":["còn {N}","剩{N}"],"home.all_done_short":["Đã kiểm hết","已全部点检"],"home.fail_n":["{N} Không đạt","{N}项不合格"],"home.none_pending":["Không có việc chờ","无待办"],"home.none_drafts":["Không có nháp","无草稿"],"home.today_table":["Phiếu kỳ này","本期点检表"],"home.col_period":["Kỳ","周期"],"tpl.count":["{N} mẫu","{N}个模板"],"tile.history":["Lịch sử kiểm","点检记录"],"hist.title":["Lịch sử kiểm","点检记录"],"hist.n7":["{N} lượt / 7 ngày","7天{N}次"],"hist.checked_at":["Lúc kiểm","点检时间"],"hist.fail_items":["Mục Không đạt","不合格项"],"hist.partial":["Kiểm dở","未完成"],"hist.search":["Tìm mã, tên máy, người kiểm","搜索设备编号、名称、点检人"],"hist.window":["Lượt kiểm từ {D} (cũ hơn xem ở Bảng tháng / Báo cáo)","自 {D} 起的点检（更早请看月表/报表）"],"hist.queued_n":["{N} lượt đang chờ gửi (xem Nháp chờ gửi)","{N}次待上传（见待同步）"],"hist.none":["Chưa có lượt kiểm nào","暂无点检记录"],"melink.url_self":["Đây là link của chính Checksheet — cần dán link /exec của máy chủ M&E (link đang dùng trong app M&E)","这是点检表自己的链接——请粘贴M&E服务器的 /exec 链接（M&E应用中使用的链接）"],"mac.saving":["Đang lưu…","保存中…"],"mac.assigned_ok":["Đã gán mẫu “{T}”","已分配模板“{T}”"],"tpl.assigning":["Đang gán cho {N} máy…","正在分配给{N}台设备…"],"tpl.form_code":["Mã biểu mẫu ISO","ISO表单编号"],"tpl.form_code_hint":["In trên PDF và Excel Bảng tháng, vd. BM-CĐ-07-02; để trống nếu không có","打印在月度点检表PDF及Excel上，例如BM-CĐ-07-02；没有可留空"],"tpl.iso_btn":["Tạo bộ mẫu theo biểu ISO","按ISO表单创建模板"],"tpl.iso_title":["Bộ mẫu theo biểu ISO cơ điện","机电ISO表单模板"],"tpl.iso_hint":["Mẫu soạn sẵn từ bộ biểu BM-CĐ của công ty, mang mã biểu in trên PDF. Tạo xong mẫu chưa gán máy: mở từng mẫu → Gán cho máy. Ô tiêu chuẩn \"……\" trên biểu để Không đặt — đặt theo nhà sản xuất ở mẫu hoặc tiêu chuẩn riêng theo máy.","根据公司BM-CĐ表单预制的模板，带有打印在PDF上的表单编号。创建后尚未分配设备：逐个打开模板→分配给设备。表单上\"……\"的标准设为不设定——请按厂家要求在模板或设备专用标准中设置。"],"tpl.iso_all":["Chọn tất cả mẫu chưa tạo ({N})","全选未创建的模板（{N}）"],"tpl.iso_exists":["Đã tạo · {C}","已创建·{C}"],"tpl.iso_create":["Tạo các mẫu đã chọn","创建所选模板"],"tpl.iso_created":["Đã tạo {N} mẫu — mở từng mẫu để gán máy","已创建{N}个模板——请逐个打开分配设备"],"tpl.iso_none_left":["Đã tạo đủ các mẫu ISO","ISO模板已全部创建"],"tpl.iso_migrate":["Máy chủ chưa chạy migrateSchema sau khi dán mã mới — Quản trị chạy migrateSchema trong Apps Script rồi thử lại","服务器粘贴新代码后尚未运行migrateSchema——请管理员在Apps Script中运行migrateSchema后重试"]};

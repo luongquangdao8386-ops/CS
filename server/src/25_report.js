@@ -534,7 +534,9 @@ function reportPdfAction_(ctx) {
   var macName = (mac.name_vi || '') + (mac.name_zh ? ' · ' + mac.name_zh : '');
   var title = lab_('rpt.title');
   var nowIso = isoVN_(now_());
-  var footer = title + ' · ' + code + ' · ' + mac.machine_code + ' · ' + lab_('rpt.generated_at') + ' ' + fmtDateVN_(nowIso) + ' ' + nowIso.slice(11, 16);
+  // Mã biểu mẫu ISO của các mẫu trong phiếu (Templates.form_code), in ở khối thông tin bên phải và chân trang
+  var formCodes = tpls.map(function (t) { return trimStr_(t.form_code); }).filter(function (c, i, a) { return c && a.indexOf(c) === i; });
+  var footer = (formCodes.length ? formCodes.join(', ') + ' · ' : '') + title + ' · ' + code + ' · ' + mac.machine_code + ' · ' + lab_('rpt.generated_at') + ' ' + fmtDateVN_(nowIso) + ' ' + nowIso.slice(11, 16);
   var pd = pdfStart_({ wide: true, footer: footer });
   var tp = LABELS['rpt.title'] || ['', ''];
   pdfTitle_(pd, tp[0].toUpperCase(), tp[1]);
@@ -543,11 +545,11 @@ function reportPdfAction_(ctx) {
     [lab_('rpt.machine'), mac.machine_code + ' · ' + macName],
     [lab_('rpt.area'), areaName || '—'],
     [lab_('rpt.month'), md.ym.slice(5, 7) + '/' + md.ym.slice(0, 4)]
-  ], [
+  ], (formCodes.length ? [[lab_('rpt.form_code'), formCodes.join(', ')]] : []).concat([
     [lab_('rpt.number'), code],
     [lab_('rpt.generated_at'), fmtDateVN_(nowIso) + ' ' + nowIso.slice(11, 16)],
     [lab_('rpt.prepared_by'), ctx.user.display_name]
-  ]);
+  ]));
   var people = { list: [], map: {} };
   var shiftsAll = shiftsCfg_();
   tpls.forEach(function (tpl) {
@@ -560,7 +562,7 @@ function reportPdfAction_(ctx) {
         var sc = shiftsAll.filter(function (x) { return String(x.no) === sh; })[0];
         shTxt = ' · ' + lab_('rpt.shift', { N: sh }) + (sc ? ' (' + sc.start + ' – ' + sc.end + ')' : '');
       }
-      pdfHeading_(pd, tpl.template_code + ' · ' + (tpl.name_vi || tpl.name_zh) + ' · ' + lab_('freq.' + tpl.frequency) + shTxt + ' · ' + lab_('rpt.revision', { N: tpl.revision }), 8);
+      pdfHeading_(pd, tpl.template_code + (trimStr_(tpl.form_code) ? ' · ' + trimStr_(tpl.form_code) : '') + ' · ' + (tpl.name_vi || tpl.name_zh) + ' · ' + lab_('freq.' + tpl.frequency) + shTxt + ' · ' + lab_('rpt.revision', { N: tpl.revision }), 8);
       var rate = g.counts.due ? Math.round(g.counts.done / g.counts.due * 1000) / 10 : 0;
       pdfTiles_(pd, [
         { label: lab_('rpt.tile_runs'), value: g.counts.done + '/' + g.counts.due },

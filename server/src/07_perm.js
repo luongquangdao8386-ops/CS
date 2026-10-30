@@ -33,6 +33,8 @@ var ACTION_TABLE_ = [
   // Mẫu, thư viện hạng mục, gán máy, thiết bị
   'template.edit|3|net|W',
   'template.archive|3|net|W',
+  'template.isoList|3|net|R',
+  'template.isoSeed|3|pin|W',
   'library.edit|3|net|W',
   'assignment.edit|3|net|W',
   'assignment.add|3|net|W',

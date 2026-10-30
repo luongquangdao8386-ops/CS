@@ -1,7 +1,7 @@
 {
   "name": "checksheet",
   "private": true,
-  "version": "1.0.0-d1.1",
+  "version": "1.0.0-d1.2",
   "description": "Checksheet · 点检表 — kiểm tra thiết bị hằng ngày. Google Apps Script + PWA (GitHub Pages)",
   "type": "module",
   "scripts": {
