@@ -160,10 +160,18 @@ export async function dueList({ all = false } = {}) {
   const sh = shifts();
   const [tpls, macs, areas, runIdx, queued] = [await mapOf('TEMPLATE'), await mapOf('MACHINE'), await mapOf('AREA'), await runIndex(), await queuedRuns()];
   const itemsN = new Map();
+  const optKeys = new Map(); // mẫu → item_key các hạng mục không bắt buộc (bỏ được theo máy)
   for (const ti of await recs('TEMPLATE_ITEM')) {
     const t = tpls.get(ti.template_id);
-    if (t && Number(ti.revision) === Number(t.revision)) itemsN.set(ti.template_id, (itemsN.get(ti.template_id) || 0) + 1);
+    if (!t || Number(ti.revision) !== Number(t.revision)) continue;
+    itemsN.set(ti.template_id, (itemsN.get(ti.template_id) || 0) + 1);
+    if (ti.required === false) { if (!optKeys.has(ti.template_id)) optKeys.set(ti.template_id, new Set()); optKeys.get(ti.template_id).add(ti.item_key); }
   }
+  // Số hạng mục của một máy: trừ hạng mục máy này không có (Tiêu chuẩn riêng: off)
+  const nItems = (a) => {
+    const opt = optKeys.get(a.template_id), ov = a.overrides_json || {};
+    return (itemsN.get(a.template_id) || 0) - (opt ? [...opt].filter((k) => ov[k] && ov[k].off === true).length : 0);
+  };
   const lastBy = new Map();
   for (const r of await recs('RUN')) {
     const cur = lastBy.get(r.assignment_id);
@@ -181,7 +189,7 @@ export async function dueList({ all = false } = {}) {
     const q = period ? queued.get(k) || null : null;
     const last = lastBy.get(a.assignment_id) || null;
     out.push({
-      asg: a, tpl, mac, area: areas.get(mac.area_id) || null, items: itemsN.get(tpl.template_id) || 0, period, run, queued: q,
+      asg: a, tpl, mac, area: areas.get(mac.area_id) || null, items: nItems(a), period, run, queued: q,
       state: runState(run, q), last: last && (!run || last.run_id !== run.run_id) ? last : null
     });
   }

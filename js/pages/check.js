@@ -102,7 +102,10 @@ export async function renderCheck(view, { shell, params, query }) {
   const tplByKey = new Map(tplItems.map((x) => [x.item_key, x]));
   const rev = run ? Number(run.template_revision) : (queued ? Number(queued.payload.template_revision) || Number(tpl.revision) : Number(tpl.revision));
   const raw = run && Number(run.template_revision) !== Number(tpl.revision) ? itemsFromRun(run, tplByKey) : tplItems;
-  const items = raw.map((ti) => (run && Number(run.template_revision) !== Number(tpl.revision) ? { ...effItem(ti, null), how_vi: ti.how_vi, how_zh: ti.how_zh } : effItem(ti, asg.overrides_json)));
+  // Hạng mục máy này không có (bỏ ở Tiêu chuẩn riêng): không hiện, trừ khi lượt đã có giá trị cho nó
+  const hasVal = new Set([...((run && run.results_json) || []).filter((r) => r.result && r.result !== 'EMPTY'), ...((queued && queued.payload.results) || [])].map((r) => r.item_key));
+  const items = raw.map((ti) => (run && Number(run.template_revision) !== Number(tpl.revision) ? { ...effItem(ti, null), how_vi: ti.how_vi, how_zh: ti.how_zh } : effItem(ti, asg.overrides_json)))
+    .filter((it) => !it.off || hasVal.has(it.item_key));
   if (!items.length) { view.innerHTML = `<div class="card empty-state"><p class="muted">${bi('check.no_items')}</p></div>`; return; }
 
   // ---- Quyền sửa ----
@@ -199,7 +202,7 @@ export async function renderCheck(view, { shell, params, query }) {
     const nDocs = docs.filter((d) => d.item_key === it.item_key).length;
     return `<div class="ci" id="ci-${i}" data-i="${i}">
       <div class="ci-head"><div class="ci-name"><div class="vi">${esc(it.name_vi || it.name_zh)}</div>${it.name_zh && it.name_vi ? `<div class="zh">${esc(it.name_zh)}</div>` : ''}</div><span class="ci-pill" id="pill-${i}"></span></div>
-      <div class="ci-std small">${stdLine(it) || `<span class="muted">${bi('chk.no_std')}</span>`}</div>
+      ${stdLine(it) ? `<div class="ci-std small">${stdLine(it)}</div>` : (it.input_type === 'PASS_FAIL' ? '' : `<div class="ci-std small"><span class="muted">${bi('chk.no_std')}</span></div>`)}
       ${inputHtml(it, i)}
       <div class="ci-msg" id="msg-${i}" hidden></div>
       ${how}

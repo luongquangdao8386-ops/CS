@@ -17,6 +17,9 @@ const ITEMS = [
   { input_type: 'NUMBER', unit: 'rpm', std_type: 'NONE' },
   { input_type: 'THREE_PHASE', unit: 'A', std_type: 'MAX', std_max: 50, extra_json: { imb_max: 10, imb_warn: 8 } },
   { input_type: 'THREE_PHASE', unit: 'A', std_type: 'NONE', extra_json: {} },
+  { input_type: 'THREE_PHASE', unit: 'A', std_type: 'NONE', extra_json: { imb_max: 10 }, std_text_vi: 'Theo định mức tủ', std_text_zh: '按配电柜额定值' },
+  { input_type: 'THREE_PHASE', unit: 'V', std_type: 'TOL', std_nominal: 380, std_tol_pct: 5, extra_json: { imb_max: 10 } },
+  { input_type: 'CHOICE', choices_json: [{ code: 'OK', vi: 'Đủ', zh: '充足', result: 'OK' }, { code: 'LOW', vi: 'Thấp', zh: '偏低', result: 'WARN' }, { code: 'BELOW_MIN', vi: 'Dưới min', zh: '低于下限', result: 'FAIL' }] },
   { input_type: 'CHOICE', choices_json: [{ code: 'LOW', vi: 'Thấp', zh: '偏低', result: 'FAIL' }, { code: 'NORMAL', vi: 'Bình thường', zh: '正常', result: 'OK' }, { code: 'HIGH', vi: 'Cao', zh: '偏高', result: 'WARN' }] },
   { input_type: 'PASS_FAIL', std_text_vi: 'Không rò rỉ', std_text_zh: '无泄漏' },
   { input_type: 'TEXT' }

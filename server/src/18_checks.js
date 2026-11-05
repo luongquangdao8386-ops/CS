@@ -49,8 +49,12 @@ function evaluateRun_(items, overrides, inputs) {
   (inputs || []).forEach(function (x) { if (x && x.item_key) byKey[x.item_key] = x; });
   var errs = [];
   var c = { filled: 0, total: 0, fail: 0, warn: 0 };
-  var results = items.map(function (ti, i) {
+  var results = [];
+  items.forEach(function (ti) {
     var it = effItem_(ti, overrides);
+    // Máy không có hạng mục này (bỏ ở Tiêu chuẩn riêng): không lưu, không tính vào đủ/thiếu — trừ khi app vẫn gửi giá trị (lượt cũ)
+    if (it.off && !byKey[ti.item_key]) return;
+    var i = results.length;
     var inp = normInput_(it, byKey[ti.item_key]);
     var j = judgeItem_(it, inp);
     var r = {
@@ -67,7 +71,7 @@ function evaluateRun_(items, overrides, inputs) {
     if (j.result !== 'EMPTY') c.filled++;
     if (j.result === 'FAIL') { c.fail++; if (!r.note) errs.push(fieldError_('results.' + i + '.note', 'FAIL_NOTE_REQUIRED')); }
     if (j.result === 'WARN') c.warn++;
-    return r;
+    results.push(r);
   });
   return { results: results, counts: c, errs: errs };
 }

@@ -6,7 +6,7 @@ import { isWide } from '../shell.js';
 import { recs, byId, mapOf, roleLevel, boot, dueList, inMyAreas, templateItems } from '../data.js';
 import { writeOnline, writeFail, showErrors, busy } from '../form.js';
 import { app, afterCommit } from '../app.js';
-import { overrideEditorHtml, wireOverrides, readOverride } from '../std-edit.js';
+import { overrideEditorHtml, wireOverrides, readOverride, hasOverride } from '../std-edit.js';
 import { stateBadge, freqText } from './today.js';
 import { periodLabel } from './check.js';
 
@@ -105,10 +105,11 @@ export async function renderMachine(view, { shell, params }) {
     const t = tpls.get(a.template_id);
     if (!t) return '';
     const d = due.find((x) => x.asg.assignment_id === a.assignment_id);
-    const nOv = a.overrides_json ? Object.keys(a.overrides_json).length : 0;
+    const ovs = Object.values(a.overrides_json || {});
+    const nOff = ovs.filter((o) => o && o.off === true).length, nOv = ovs.length - nOff;
     return `<div class="card asg-card">
       <div class="row between"><strong>${esc(nameText(t))}</strong>${d && d.period ? stateBadge(d.state) : (t.active ? '' : `<span class="badge t-grey">${bi('tpl.archived')}</span>`)}</div>
-      <div class="muted small">${esc(t.template_code)} · ${freqText(t, d ? d.items : 0)}${d && d.period ? ' · ' + periodLabel(t.frequency, d.period.work_date, d.period.shift) : ''}${nOv ? ' · ' + bi('mac.own_std_n', { N: nOv }) : ''}</div>
+      <div class="muted small">${esc(t.template_code)} · ${freqText(t, d ? d.items : 0)}${d && d.period ? ' · ' + periodLabel(t.frequency, d.period.work_date, d.period.shift) : ''}${nOv ? ' · ' + bi('mac.own_std_n', { N: nOv }) : ''}${nOff ? ' · ' + bi('mac.off_n', { N: nOff }) : ''}</div>
       <div class="row">
         ${d && d.period && t.active ? `<a class="btn small primary" href="#/check/${encodeURIComponent(a.assignment_id)}">${ICON.checklist}<span>${bi('mac.check_now')}</span></a>` : ''}
         ${c3 ? `<button type="button" class="btn small" data-ov="${esc(a.assignment_id)}"${dis}>${ICON.edit}<span>${bi('mac.own_std')}</span></button>
@@ -179,9 +180,12 @@ export async function renderMachine(view, { shell, params }) {
   }));
 }
 
-/** Tiêu chuẩn riêng của máy cho các hạng mục số của mẫu (vd máy cũ chạy nóng hơn: dầu ≤ 65 °C) */
+/**
+ * Tiêu chuẩn riêng của máy: hạng mục số (vd máy cũ chạy nóng hơn: dầu ≤ 65 °C) và bỏ hạng mục "nếu có" máy này không có
+ * (vd chiller giải nhiệt gió bỏ hai mục nước giải nhiệt).
+ */
 async function overridesDialog(a, tpl) {
-  const items = (await templateItems(tpl.template_id)).filter((x) => x.input_type === 'NUMBER' || x.input_type === 'THREE_PHASE');
+  const items = (await templateItems(tpl.template_id)).filter(hasOverride);
   if (!items.length) { toast(bi('ov.no_numeric')); return false; }
   const ov = a.overrides_json || {};
   const v = await dialog({

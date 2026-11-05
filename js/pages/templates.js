@@ -46,6 +46,7 @@ export async function renderTemplates(view, { shell }) {
       <a class="btn small primary${online ? '' : ' disabled'}" href="#/templates/new">${ICON.plus}<span>${bi('tpl.new')}</span></a>
       <a class="btn small" href="#/templates/library">${ICON.library}<span>${bi('tpl.library')}</span></a>
       <button type="button" class="btn small" id="tp-iso"${online ? '' : ' disabled'}>${ICON.plus}<span>${bi('tpl.iso_btn')}</span></button>
+      <button type="button" class="btn small" id="tp-daily"${online ? '' : ' disabled'}>${ICON.plus}<span>${bi('tpl.daily_btn')}</span></button>
       ${archivedN ? `<button type="button" class="btn small" id="tp-arch">${bi(showArchived ? 'tpl.hide_archived' : 'tpl.show_archived', { N: archivedN })}</button>` : ''}</div></div>
     ${online ? '' : `<p class="banner warn">${bi('sync.need_network')}</p>`}
     <p class="muted small">${bi('tpl.list_hint')}</p>
@@ -54,29 +55,39 @@ export async function renderTemplates(view, { shell }) {
   $$('tr[data-href]', view).forEach((tr) => tr.addEventListener('click', () => { location.hash = tr.dataset.href; }));
   const ab = $('#tp-arch', view);
   if (ab) ab.addEventListener('click', () => { showArchived = !showArchived; renderTemplates(view, { shell }); });
-  $('#tp-iso', view).addEventListener('click', async (ev) => { if (await isoDialog(ev.currentTarget)) renderTemplates(view, { shell }); });
+  $('#tp-iso', view).addEventListener('click', async (ev) => { if (await isoDialog(ev.currentTarget, 'ISO')) renderTemplates(view, { shell }); });
+  $('#tp-daily', view).addEventListener('click', async (ev) => { if (await isoDialog(ev.currentTarget, 'DAILY')) renderTemplates(view, { shell }); });
 }
 
+/** Chữ của hai bộ mẫu soạn sẵn */
+const PRESET_TEXT = {
+  ISO: { title: 'tpl.iso_title', hint: 'tpl.iso_hint', none: 'tpl.iso_none_left' },
+  DAILY: { title: 'tpl.daily_title', hint: 'tpl.daily_hint', none: 'tpl.daily_none_left' }
+};
+
 /**
- * Bộ mẫu theo biểu ISO cơ điện (BM-CĐ-xx): máy chủ giữ sẵn nội dung; chọn mẫu → PIN → tạo (chưa gán máy).
- * Mẫu đã tạo (kể cả đã ngừng) không tạo lại.
+ * Bộ mẫu soạn sẵn: theo biểu ISO cơ điện (BM-CĐ-xx) hoặc hằng ngày cho 7 loại máy (HN-xx). Máy chủ giữ sẵn nội dung;
+ * chọn mẫu → PIN → tạo (chưa gán máy). Mẫu đã tạo (kể cả đã ngừng) không tạo lại.
  */
-async function isoDialog(btn) {
+async function isoDialog(btn, set) {
+  const tx = PRESET_TEXT[set];
   busy(btn, true);
-  const r = await api('template.isoList', {}, { retry: true });
+  const r = await api('template.isoList', { set }, { retry: true });
   busy(btn, false);
   if (!r.ok) { toast(esc(resMsg(r)), 'err'); return false; }
+  // Máy chủ cũ (chưa dán Code.gs mới) không biết bộ hằng ngày → trả bộ ISO, không có trường set
+  if ((r.data.set || 'ISO') !== set) { toast(bi('tpl.preset_old_server'), 'err'); return false; }
   const list = r.data.templates || [];
   const left = list.filter((t) => !t.exists);
   const row = (t) => `<label class="check lib-pick iso-pick"><input type="checkbox" value="${esc(t.key)}"${t.exists ? ' disabled' : ' checked'}>
-    <span><span class="code">${esc(t.form_code)}</span> ${esc(nameText(t))}
+    <span><span class="code">${esc(t.form_code || t.key)}</span> ${esc(nameText(t))}
     <span class="muted small"> · ${bi('freq_each.' + t.frequency)} · ${bi('home.items_n', { N: t.items })}${t.exists ? ` · <span class="badge t-grey">${bi('tpl.iso_exists', { C: t.template_code })}</span>` : ''}</span></span></label>`;
   const keys = await dialog({
-    title: bi('tpl.iso_title'),
+    title: bi(tx.title),
     wide: true,
-    body: `<p class="muted small">${bi('tpl.iso_hint')}</p>
+    body: `<p class="muted small">${bi(tx.hint)}</p>
       ${r.data.migrated === false ? `<p class="banner warn" id="iso-migrate">${bi('tpl.iso_migrate')}</p>` : ''}
-      ${left.length ? `<label class="check"><input type="checkbox" id="iso-all" checked><span>${bi('tpl.iso_all', { N: left.length })}</span></label>` : `<p class="muted">${bi('tpl.iso_none_left')}</p>`}
+      ${left.length ? `<label class="check"><input type="checkbox" id="iso-all" checked><span>${bi('tpl.iso_all', { N: left.length })}</span></label>` : `<p class="muted">${bi(tx.none)}</p>`}
       <div class="lib-list" id="iso-list">${list.map(row).join('')}</div>`,
     actions: [{ label: bi('btn.cancel'), value: null }].concat(left.length && r.data.migrated !== false
       ? [{ label: bi('tpl.iso_create'), kind: 'primary', read: (w) => $$('#iso-list input:checked', w).map((i) => i.value) }] : []),

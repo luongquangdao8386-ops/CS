@@ -1,4 +1,5 @@
-/* 16_assign: gán mẫu cho máy và tiêu chuẩn riêng theo từng máy (overrides_json, khóa theo item_key của hạng mục) */
+/* 16_assign: gán mẫu cho máy và tiêu chuẩn riêng theo từng máy (overrides_json, khóa theo item_key của hạng mục).
+ * {off: true} = máy này không có hạng mục đó (chỉ hạng mục không bắt buộc, mục "nếu có"): không hiện khi kiểm, không tính vào đủ/thiếu. */
 
 var OVERRIDE_FIELDS_ = ['unit', 'std_type', 'std_min', 'std_max', 'std_nominal', 'std_tol_pct', 'warn_lo', 'warn_hi', 'extra_json'];
 
@@ -14,6 +15,11 @@ function normOverrides_(ov, items, errs) {
     if (!o || typeof o !== 'object' || !Object.keys(o).length) return;
     var ti = byKey[k];
     if (!ti) { errs.push(fieldError_('overrides.' + k, 'NOT_FOUND')); return; }
+    if (o.off === true) {
+      if (ti.required !== false) errs.push(fieldError_('overrides.' + k, 'OFF_REQUIRED'));
+      else out[k] = { off: true };
+      return;
+    }
     if (ti.input_type !== 'NUMBER' && ti.input_type !== 'THREE_PHASE') { errs.push(fieldError_('overrides.' + k, 'INVALID_VALUE')); return; }
     var merged = Object.assign({}, ti, o, { input_type: ti.input_type });
     var std = normStd_(merged, errs, 'overrides.' + k + '.');

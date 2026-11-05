@@ -11,16 +11,29 @@ function numOrNull_(v) {
   return isFinite(n) ? n : null;
 }
 
-/** Hạng mục hiệu lực của một máy: hạng mục của mẫu + tiêu chuẩn riêng (nếu có) */
+/**
+ * Hạng mục hiệu lực của một máy: hạng mục của mẫu + tiêu chuẩn riêng (nếu có).
+ * off = máy này không có hạng mục (chỉ khi hạng mục không bắt buộc; mẫu đổi sang bắt buộc thì hạng mục hiện lại).
+ */
 function effItem_(ti, overrides) {
   var o = {};
   ITEM_COPY_FIELDS_.concat(STD_FIELDS_).forEach(function (f) { o[f] = ti[f] === undefined ? null : ti[f]; });
   var ov = overrides && ti.item_key ? overrides[ti.item_key] : null;
   if (ov && typeof ov === 'object') {
-    STD_FIELDS_.forEach(function (f) { if (ov[f] !== undefined && ov[f] !== null && ov[f] !== '') o[f] = ov[f]; });
-    o.overridden = true;
+    var own = false;
+    STD_FIELDS_.forEach(function (f) { if (ov[f] !== undefined && ov[f] !== null && ov[f] !== '') { o[f] = ov[f]; own = true; } });
+    if (own) o.overridden = true;
+    if (ov.off === true && ti.required === false) o.off = true;
   }
   return o;
+}
+
+/** Hạng mục bị bỏ ở máy này mà lượt kiểm không có kết quả cho nó → không hiện (bảng tháng, báo cáo) */
+function offSkip_(it, runs) {
+  if (!it.off) return false;
+  return !(runs || []).some(function (r) {
+    return (r.results_json || []).some(function (x) { return x.item_key === it.item_key && x.result && x.result !== 'EMPTY'; });
+  });
 }
 
 /** Giới hạn đạt {min, max} theo kiểu tiêu chuẩn; null = không giới hạn phía đó */
@@ -115,15 +128,18 @@ function stdText_(it, lang) {
     case 'TOL': t = fmtNumVi_(it.std_nominal) + u + ' ± ' + fmtNumVi_(it.std_tol_pct) + ' % (' + fmtNumVi_(b.min) + ' – ' + fmtNumVi_(b.max) + u + ')'; break;
     default: t = '';
   }
+  var custom = trimStr_(lang === 'zh' ? (it.std_text_zh || it.std_text_vi) : (it.std_text_vi || it.std_text_zh));
   if (it.input_type === 'THREE_PHASE') {
+    // Không đặt giới hạn mỗi pha: dùng chữ tiêu chuẩn (vd. "Theo định mức tủ") trước ngưỡng lệch pha
     var ex = it.extra_json || {};
     var imbMax = numOrNull_(ex.imb_max);
-    t = (t ? t + (lang === 'zh' ? '（每相）' : ' mỗi pha') : '') + (lang === 'zh' ? '，不平衡 ≤ ' : ', lệch ≤ ') + fmtNumVi_(imbMax === null ? 10 : imbMax) + ' %';
+    var imb = fmtNumVi_(imbMax === null ? 10 : imbMax) + ' %';
+    var head = t ? t + (lang === 'zh' ? '（每相）' : ' mỗi pha') : custom;
+    t = head ? head + (lang === 'zh' ? '，不平衡 ≤ ' : ', lệch ≤ ') + imb : (lang === 'zh' ? '不平衡 ≤ ' : 'Lệch ≤ ') + imb;
   } else if (it.input_type === 'CHOICE') {
     var cs = Array.isArray(it.choices_json) ? it.choices_json : [];
     t = cs.filter(function (c) { return c && c.result === 'OK'; }).map(function (c) { return lang === 'zh' ? (c.zh || c.vi) : (c.vi || c.zh); }).join(' / ');
   }
-  var custom = trimStr_(lang === 'zh' ? (it.std_text_zh || it.std_text_vi) : (it.std_text_vi || it.std_text_zh));
   if (it.input_type === 'PASS_FAIL' || it.input_type === 'TEXT' || !t) return custom || t;
   return t;
 }

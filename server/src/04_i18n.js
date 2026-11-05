@@ -59,6 +59,7 @@ var SUB_MSG = {
   ISO_ALL_EXIST: ['Các mẫu đã chọn đều đã được tạo', '所选模板均已创建'],
   MIGRATE_REQUIRED: ['Máy chủ chưa chạy migrateSchema (thiếu cột form_code)', '服务器尚未运行migrateSchema（缺少form_code列）'],
   FORM_CODE_LONG: ['Mã biểu mẫu tối đa 40 ký tự', '表单编号最多40个字符'],
+  OFF_REQUIRED: ['Chỉ bỏ được hạng mục không bắt buộc (mục "nếu có")', '只能取消非必填项目（“如有”项目）'],
   SHIFTS_INVALID: ['Giờ các ca không hợp lệ', '班次时间无效'],
   FAIL_NOTE_REQUIRED: ['Mục Không đạt phải có ghi chú', '不合格项目须填写备注'],
   PERIOD_INVALID: ['Ngày/ca của lượt kiểm không hợp lệ', '点检日期/班次无效'],

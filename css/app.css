@@ -1256,6 +1256,8 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .modal-card.wide { width: min(980px, calc(100vw - 24px)); max-width: none; }
 .ov { padding: 10px 12px; }
 .ov .ie-head { flex-wrap: wrap; }
+.ov.is-off { background: #F5F6F8; }
+.ov.is-off .ie-head > strong, .ov.is-off .ie-head > .zh, .ov.is-off > .muted { text-decoration: line-through; color: var(--muted); }
 .area-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 10px; }
 .shift-rows { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
 .shift-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

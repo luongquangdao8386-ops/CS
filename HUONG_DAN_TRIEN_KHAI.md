@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.2 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026)
+# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.3 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026; d1.3 bộ mẫu hằng ngày 7 loại máy)
 
 Checksheet là app riêng, máy chủ riêng (dự án Apps Script riêng, bảng tính riêng), chỉ **đọc** danh sách thiết bị và khu vực từ M&E.
 Cách làm giống hệt M&E: dán `Code.gs` vào Apps Script, triển khai web app, mở trang app trên GitHub Pages.
@@ -123,6 +123,62 @@ Bản này đổi mã máy chủ, làm lần lượt trên **THỬ** (`CS_MayChu
 8. Kiểm thử: **Báo cáo** → chọn máy đã gán mẫu ISO → **Tải PDF** → thấy *Mã biểu mẫu: BM-CĐ-…* ở góc phải và chân trang.
 
 Nếu bấm *Tạo bộ mẫu* mà app báo **Máy chủ chưa chạy migrateSchema** → làm lại bước 3 rồi bước 4.
+
+## Phần K — Bản 1.0.0-d1.3: bộ mẫu hằng ngày cho 7 loại máy, bỏ mục "nếu có" theo từng máy
+
+Thêm nút **Mẫu checksheet → Tạo bộ mẫu hằng ngày**: 7 mẫu kiểm **mỗi ngày**, làm cùng cách bộ mẫu ISO (mã cố định, chọn để tạo, không tạo trùng):
+
+| Mã | Mẫu | Hạng mục |
+| --- | --- | --- |
+| HN-01 | Máy phát điện (lúc máy đứng chờ) | 11 |
+| HN-02 | Phòng điện | 10 |
+| HN-03 | Máy nén khí | 10 |
+| HN-04 | Máy sấy lạnh | 6 |
+| HN-05 | Máy sấy hấp thụ | 8 |
+| HN-06 | Chiller | 12 |
+| HN-07 | Hệ bơm chiller (gán cho từng bơm) | 9 |
+
+- Mẫu ISO vẫn giữ. Máy phát: mẫu ngày (đứng chờ) và mẫu ISO 07-06 (chạy thử tuần/tháng) gán cùng một máy được.
+  Phòng điện, máy nén khí, chiller: mỗi máy nên gán **một** trong hai (mẫu ngày *hoặc* mẫu ISO theo ca 07-01 / 07-02 / 07-04), tránh ghi hai lần.
+- **[Mức]** (dầu nhớt, nước làm mát, dầu máy nén) là ô chọn **Đủ** (Đạt) / **Thấp** (Cần chú ý) / **Dưới min** (Không đạt).
+- Tiêu chuẩn "theo nhà sản xuất / cài đặt / thiết kế / định mức" để **Không đặt** (chỉ hiện chữ). Các số đề xuất (nhiên liệu ≥ 50 %,
+  phòng điện ≤ 35 °C, điện áp 380 V ± 5 %, cos φ ≥ 0,9, phòng máy nén ≤ 40 °C, điểm sương ≤ 10 °C / ≤ −40 °C…) sửa được ở mẫu
+  (áp cho mọi máy) hoặc **Thiết bị → máy → Tiêu chuẩn riêng** (từng máy, đổi được cả đơn vị, vd dòng máy nén chiller theo **%** tải).
+- **Lưu ý điện áp**: 380 V ± 5 % = 361–399 V. Tủ tổng lưới 400 V thường đo 400–410 V → sẽ báo Không đạt. Khi đó sửa ở mẫu HN-02
+  (hạng mục *Điện áp thanh cái tổng* → Định mức 400) hoặc ở Tiêu chuẩn riêng của từng phòng điện.
+- **Mục "(nếu có)"** (nước giải nhiệt và dàn ngưng của chiller; biến tần và tháp giải nhiệt của bơm) không bắt buộc. Máy không có:
+  **Thiết bị → máy → Tiêu chuẩn riêng** → tích **Máy này không có** ở mục đó → **Lưu**. Mục đó biến mất khỏi phiếu kiểm, Bảng tháng,
+  PDF/Excel của máy đó và không làm phiếu thành "Chưa đủ". Bỏ tích là hiện lại. (Cũng dùng được cho mục "nếu có" của mẫu ISO.)
+- Đổi sang kiểm **theo ca** sau này: mở mẫu → **Tần suất: Mỗi ca** → chọn ca → **Lưu** (từ hôm đó bảng tháng tách theo ca).
+
+### Cập nhật máy chủ (không thêm sheet/cột — không cần migrateSchema)
+
+Làm lần lượt trên **THỬ** (`CS_MayChu_THU`) rồi **THẬT** (`CS_MayChu_THAT`):
+
+1. **Quản trị → Sao lưu → Sao lưu ngay**.
+2. Mở dự án Apps Script → xóa hết `Code.gs` cũ → dán `Code.gs` mới (link raw Claude gửi) → **Lưu**.
+3. **Triển khai → Quản lý các bản triển khai** → bút chì → **Phiên bản mới** → **Triển khai** (link `/exec` giữ nguyên).
+4. Trên app: **Mẫu checksheet → Tạo bộ mẫu hằng ngày** → bỏ chọn mẫu không dùng → **Tạo các mẫu đã chọn** → PIN → mở từng mẫu → **Gán cho máy**.
+   App báo **Máy chủ chưa có bộ mẫu này** → máy chủ chưa dán Code.gs mới hoặc chưa tạo Phiên bản mới (làm lại bước 2–3).
+
+### Khai phòng điện và bơm bên M&E để gán mẫu
+
+Checksheet chỉ gán mẫu cho **thiết bị lấy từ M&E**. Phòng điện và từng bơm phải là thiết bị trong M&E:
+
+1. **M&E** → **Thiết bị** → thêm thiết bị mới, mỗi dòng dưới đây là **một thiết bị**:
+   - Phòng điện: một thiết bị cho mỗi phòng điện (nếu một phòng có hai tủ tổng từ hai máy biến áp thì mỗi tủ tổng một thiết bị, vì điện áp/dòng đo theo tủ).
+     Tên vd `Phòng điện – Xưởng A` / `配电室–A车间`; **khu vực** = khu vực có phòng điện; loại vd *Tủ điện*.
+   - Bơm: mỗi bơm một thiết bị, vd `Bơm nước lạnh CHWP-1`, `Bơm nước lạnh CHWP-2`, `Bơm giải nhiệt CWP-1` (khu vực = phòng chiller / phòng bơm);
+     ghi model, công suất, dòng định mức trên nhãn động cơ vào thông tin thiết bị để tra khi đặt tiêu chuẩn.
+   - Trạng thái **đang dùng** (thiết bị ngừng / thanh lý thì Checksheet tự ẩn).
+2. In **tem QR M&E** của thiết bị, dán ở cửa phòng điện / thân bơm → bấm **Quét** trên Checksheet mở thẳng phiếu kiểm.
+3. **Checksheet → Thiết bị → Cập nhật từ M&E** (hoặc chờ tối đa 1 giờ) → thiết bị mới hiện trong danh sách.
+4. **Mẫu checksheet** → mở **HN-02 Phòng điện** → **Gán cho máy** → chọn các phòng điện. Mở **HN-07 Hệ bơm chiller** → **Gán cho máy** → chọn tất cả bơm một lần.
+5. **Thiết bị → từng máy → Tiêu chuẩn riêng**:
+   - Phòng điện: *Dòng điện tổng* → **Dùng tiêu chuẩn riêng** → *Không quá* = dòng định mức tủ (A); lệch pha giữ 10 %.
+   - Bơm: *Dòng điện động cơ* → *Không quá* = dòng định mức trên nhãn; *Áp suất hút / đẩy* → *Trong khoảng* theo thiết kế.
+     Bơm không có biến tần → tích **Máy này không có** ở *Biến tần*; bơm nước lạnh (không cấp tháp) → tích **Máy này không có** ở *Tháp giải nhiệt*.
+   - Bơm dự phòng đang đứng: vẫn kiểm mục "Bơm chạy; bơm dự phòng ở AUTO"; số đo bỏ trống và ghi chú "dự phòng" (phiếu hiện *Chưa đủ*).
 
 ## Lưu ý an toàn
 

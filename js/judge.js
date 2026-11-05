@@ -11,16 +11,27 @@ export function numOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Hạng mục hiệu lực của một máy: hạng mục của mẫu + tiêu chuẩn riêng (overrides theo item_key) */
+/**
+ * Hạng mục hiệu lực của một máy: hạng mục của mẫu + tiêu chuẩn riêng (overrides theo item_key).
+ * off = máy này không có hạng mục (chỉ khi hạng mục không bắt buộc; mẫu đổi sang bắt buộc thì hạng mục hiện lại).
+ */
 export function effItem(ti, overrides) {
   const o = {};
   ITEM_COPY.concat(STD_FIELDS).forEach((f) => { o[f] = ti[f] === undefined ? null : ti[f]; });
   const ov = overrides && ti.item_key ? overrides[ti.item_key] : null;
   if (ov && typeof ov === 'object') {
-    STD_FIELDS.forEach((f) => { if (ov[f] !== undefined && ov[f] !== null && ov[f] !== '') o[f] = ov[f]; });
-    o.overridden = true;
+    let own = false;
+    STD_FIELDS.forEach((f) => { if (ov[f] !== undefined && ov[f] !== null && ov[f] !== '') { o[f] = ov[f]; own = true; } });
+    if (own) o.overridden = true;
+    if (ov.off === true && ti.required === false) o.off = true;
   }
   return o;
+}
+
+/** Hạng mục bị bỏ ở máy này mà các lượt kiểm không có kết quả cho nó → không hiện (bảng tháng, báo cáo) */
+export function offSkip(it, runs) {
+  if (!it.off) return false;
+  return !(runs || []).some((r) => (r.results_json || []).some((x) => x.item_key === it.item_key && x.result && x.result !== 'EMPTY'));
 }
 
 export function stdBounds(it) {
@@ -108,14 +119,17 @@ export function stdText(it, lang = 'vi') {
     case 'TOL': t = `${fmtNumVi(it.std_nominal)}${u} ± ${fmtNumVi(it.std_tol_pct)} % (${fmtNumVi(b.min)} – ${fmtNumVi(b.max)}${u})`; break;
     default: t = '';
   }
+  const custom = String((lang === 'zh' ? (it.std_text_zh || it.std_text_vi) : (it.std_text_vi || it.std_text_zh)) || '').trim();
   if (it.input_type === 'THREE_PHASE') {
+    // Không đặt giới hạn mỗi pha: dùng chữ tiêu chuẩn (vd. "Theo định mức tủ") trước ngưỡng lệch pha
     const ex = it.extra_json || {};
     const imbMax = numOrNull(ex.imb_max);
-    t = (t ? t + (lang === 'zh' ? '（每相）' : ' mỗi pha') : '') + (lang === 'zh' ? '，不平衡 ≤ ' : ', lệch ≤ ') + fmtNumVi(imbMax === null ? 10 : imbMax) + ' %';
+    const imb = fmtNumVi(imbMax === null ? 10 : imbMax) + ' %';
+    const head = t ? t + (lang === 'zh' ? '（每相）' : ' mỗi pha') : custom;
+    t = head ? head + (lang === 'zh' ? '，不平衡 ≤ ' : ', lệch ≤ ') + imb : (lang === 'zh' ? '不平衡 ≤ ' : 'Lệch ≤ ') + imb;
   } else if (it.input_type === 'CHOICE') {
     t = (Array.isArray(it.choices_json) ? it.choices_json : []).filter((c) => c && c.result === 'OK').map((c) => (lang === 'zh' ? (c.zh || c.vi) : (c.vi || c.zh))).join(' / ');
   }
-  const custom = String((lang === 'zh' ? (it.std_text_zh || it.std_text_vi) : (it.std_text_vi || it.std_text_zh)) || '').trim();
   if (it.input_type === 'PASS_FAIL' || it.input_type === 'TEXT' || !t) return custom || t;
   return t;
 }

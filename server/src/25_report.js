@@ -426,10 +426,14 @@ function monthGrid_(md, tpl, shift, people) {
   var missedBy = {};
   md.missed.forEach(function (m) { if (m.template_id === tpl.template_id) missedBy[m.period_key] = m; });
   var items = templateItems_(tpl.template_id, tpl.revision);
-  var keys = items.map(function (it) { return { key: it.item_key, vi: it.name_vi, zh: it.name_zh, std: stdText_(effItem_(it, asg ? asg.overrides_json : null), 'vi') }; });
+  // Hạng mục máy này không có (bỏ ở Tiêu chuẩn riêng) và tháng này không có giá trị: không in dòng
+  var keys = items.map(function (it) { return effItem_(it, asg ? asg.overrides_json : null); })
+    .filter(function (e) { return !offSkip_(e, runs); })
+    .map(function (e) { return { key: e.item_key, vi: e.name_vi, zh: e.name_zh, std: stdText_(e, 'vi') }; });
   // Hạng mục chỉ có ở phiên bản cũ (đã bỏ khỏi mẫu) nhưng có kết quả trong tháng: vẫn hiện để không mất số liệu
   runs.forEach(function (r) {
     (r.results_json || []).forEach(function (x) {
+      if (x.result === 'EMPTY' && items.some(function (it) { return it.item_key === x.item_key; })) return; // hạng mục đang bỏ ở máy này
       if (!keys.some(function (k) { return k.key === x.item_key; })) keys.push({ key: x.item_key, vi: x.name_vi, zh: x.name_zh, std: x.std_vi || '' });
     });
   });

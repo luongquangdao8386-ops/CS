@@ -4,7 +4,7 @@ import { bi, biText, esc, api, resMsg, fmtDate, fmtDateTime, nameText } from '..
 import { ICON, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, today, nowMs, shifts, localFrom, weekday, inMyAreas, users, userName } from '../data.js';
-import { monthPeriods, periodSpan, fmtNumVi, stdText, stdBounds, numOrNull } from '../judge.js';
+import { monthPeriods, periodSpan, fmtNumVi, stdText, stdBounds, numOrNull, effItem, offSkip } from '../judge.js';
 import { stateBadge } from './today.js';
 
 const state = { m: '', ym: '', t: '', shift: '', item: '', day: '' };
@@ -89,9 +89,15 @@ export function monthModel(d, ym, { templateId = '', shift = '' } = {}) {
       const rows = [];
       const seen = new Set();
       const cur = (d.items.get(tpl.template_id) || []).filter((x) => Number(x.revision) === Number(tpl.revision)).sort((a, b) => a.step_no - b.step_no);
-      cur.forEach((ti) => { seen.add(ti.item_key); rows.push({ item_key: ti.item_key, name_vi: ti.name_vi, name_zh: ti.name_zh, unit: ti.unit, input_type: ti.input_type, std_vi: stdText(ti, 'vi'), std: ti }); });
+      // Hạng mục máy này không có (bỏ ở Tiêu chuẩn riêng) và không có giá trị trong tháng: không có dòng
+      const offKeys = new Set();
+      cur.forEach((ti) => {
+        const e = effItem(ti, asg ? asg.overrides_json : null); // tiêu chuẩn của máy này (mẫu + tiêu chuẩn riêng)
+        if (offSkip(e, tRuns)) { offKeys.add(ti.item_key); return; }
+        seen.add(ti.item_key); rows.push({ item_key: ti.item_key, name_vi: ti.name_vi, name_zh: ti.name_zh, unit: e.unit, input_type: ti.input_type, std_vi: stdText(e, 'vi'), std: e });
+      });
       tRuns.forEach((r) => (r.results_json || []).forEach((x) => {
-        if (seen.has(x.item_key)) return;
+        if (seen.has(x.item_key) || offKeys.has(x.item_key)) return;
         seen.add(x.item_key);
         rows.push({ item_key: x.item_key, name_vi: x.name_vi, name_zh: x.name_zh, unit: x.unit, input_type: x.input_type, std_vi: x.std_vi, std: { ...(x.std || {}), input_type: x.input_type } });
       }));

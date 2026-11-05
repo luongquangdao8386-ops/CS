@@ -2,7 +2,8 @@
  * Mỗi mẫu mang mã biểu mẫu (Templates.form_code) in trên PDF Bảng tháng. Hạng mục, tiêu chuẩn lấy đúng chữ trên biểu;
  * ô "……" của biểu (điền theo nhà sản xuất / tiêu chuẩn công ty) để tiêu chuẩn "Không đặt" — Trưởng bộ phận đặt ở mẫu
  * hoặc tiêu chuẩn riêng theo máy. Hạng mục chỉ có ở một số máy/khu (diesel, xe điện, lò hơi…) không bắt buộc.
- * template.isoSeed tạo các mẫu được chọn (chưa gán máy); mẫu đã tạo (kể cả đã ngừng) không tạo lại. */
+ * template.isoSeed tạo các mẫu được chọn (chưa gán máy); mẫu đã tạo (kể cả đã ngừng) không tạo lại.
+ * Bộ mẫu hằng ngày (28_daily, d1.3) dùng chung cơ chế: template.isoList {set:'DAILY'}, template.isoSeed nhận khóa HN-xx. */
 
 var ISO_PF_ = 'PASS_FAIL';
 
@@ -493,13 +494,19 @@ function isoUuid_(key) {
   return h.slice(0, 8) + '-' + h.slice(8, 12) + '-4' + h.slice(13, 16) + '-' + '89ab'[parseInt(h.charAt(16), 16) % 4] + h.slice(17, 20) + '-' + h.slice(20, 32);
 }
 
-/** Danh sách mẫu ISO cho app chọn: {key, form_code, name, frequency, items, template_id, exists} */
-function isoTemplateList_() {
+/** Bộ mẫu soạn sẵn: ISO = theo biểu BM-CĐ (27_iso), DAILY = hằng ngày cho 7 loại máy (28_daily) */
+function presetSet_(set) {
+  return set === 'DAILY' ? DAILY_TEMPLATES_ : ISO_TEMPLATES_;
+}
+
+/** Danh sách mẫu của một bộ cho app chọn: {key, set, form_code, name, frequency, items, template_id, exists} */
+function isoTemplateList_(set) {
+  set = set === 'DAILY' ? 'DAILY' : 'ISO';
   var have = {};
   readRows_('Templates').forEach(function (t) { have[t.template_id] = t; });
-  return ISO_TEMPLATES_.map(function (t) {
+  return presetSet_(set).map(function (t) {
     var id = isoUuid_(t.key), cur = have[id];
-    return { key: t.key, form_code: t.form_code, name_vi: t.name_vi, name_zh: t.name_zh, frequency: t.frequency, items: t.items.length,
+    return { key: t.key, set: set, form_code: t.form_code || '', name_vi: t.name_vi, name_zh: t.name_zh, frequency: t.frequency, items: t.items.length,
       template_id: id, exists: !!cur, template_code: cur ? cur.template_code : '', active: cur ? cur.active !== false : null };
   });
 }
@@ -509,19 +516,20 @@ function isoMigrated_() {
   return hdr_('Templates').cols.indexOf('form_code') >= 0;
 }
 
-/** template.isoList: danh sách mẫu ISO và mẫu nào đã tạo */
+/** template.isoList {set?: 'ISO'|'DAILY'}: danh sách mẫu của bộ (mặc định ISO) và mẫu nào đã tạo; trả kèm set để app biết máy chủ đã có bộ đó */
 function templateIsoList_(ctx) {
-  return { templates: isoTemplateList_(), migrated: isoMigrated_() };
+  var set = (ctx.req.payload || {}).set === 'DAILY' ? 'DAILY' : 'ISO';
+  return { set: set, templates: isoTemplateList_(set), migrated: isoMigrated_() };
 }
 
 /**
- * template.isoSeed {keys: [...]} — Trưởng bộ phận/Quản trị, PIN. Tạo các mẫu chọn (phiên bản 1, đang dùng, chưa gán máy);
- * mẫu đã có (kể cả đã ngừng) bỏ qua. Mẫu theo ca dùng mọi ca đang cài đặt.
+ * template.isoSeed {keys: [...]} — Trưởng bộ phận/Quản trị, PIN. Tạo các mẫu chọn của bộ ISO hoặc bộ hằng ngày (khóa không trùng
+ * giữa hai bộ; phiên bản 1, đang dùng, chưa gán máy); mẫu đã có (kể cả đã ngừng) bỏ qua. Mẫu theo ca dùng mọi ca đang cài đặt.
  */
 function templateIsoSeed_(ctx) {
   var p = ctx.req.payload || {};
   var keys = Array.isArray(p.keys) ? p.keys.map(String) : [];
-  var defs = ISO_TEMPLATES_.filter(function (t) { return keys.indexOf(t.key) >= 0; });
+  var defs = ISO_TEMPLATES_.concat(DAILY_TEMPLATES_).filter(function (t) { return keys.indexOf(t.key) >= 0; });
   if (!defs.length) throw validationError_([fieldError_('keys', 'REQUIRED')]);
   if (!isoMigrated_()) throw validationError_([fieldError_('keys', 'MIGRATE_REQUIRED')]);
   var allShifts = shiftsCfg_().map(function (s) { return String(s.no); }).join(',');
@@ -539,7 +547,7 @@ function templateIsoSeed_(ctx) {
         var row = cNew_(ctx, {
           template_id: id, template_code: allocCode_(st, su, 'TEMPLATE'), name_vi: t.name_vi, name_zh: t.name_zh, frequency: t.frequency,
           shifts: t.frequency === 'SHIFT' ? allShifts : '', revision: 1, active: true, note_vi: t.note_vi || '', note_zh: t.note_zh || '',
-          form_code: t.form_code, i18n_meta: human(['name', 'note'])
+          form_code: t.form_code || '', i18n_meta: human(['name', 'note'])
         });
         writes.push({ sheet: 'Templates', mode: 'insert', row: row });
         t.items.forEach(function (it, i) {

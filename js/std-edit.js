@@ -173,31 +173,48 @@ export function wireItems(root) {
   });
 }
 
-/** Ô sửa tiêu chuẩn riêng của một hạng mục số (màn máy) */
+/** Hạng mục có ô Tiêu chuẩn riêng ở màn máy: hạng mục số (đặt tiêu chuẩn riêng) và hạng mục không bắt buộc (bỏ được ở máy này) */
+export function hasOverride(ti) {
+  return ti.input_type === 'NUMBER' || ti.input_type === 'THREE_PHASE' || ti.required === false;
+}
+
+/**
+ * Ô tiêu chuẩn riêng của một hạng mục (màn máy). Hạng mục số: đặt tiêu chuẩn riêng. Hạng mục không bắt buộc (mục "nếu có"):
+ * "Máy này không có" = bỏ hạng mục ở máy này (overrides {off: true}).
+ */
 export function overrideEditorHtml(ti, ov, i) {
-  const cur = { ...ti, ...(ov || {}) };
-  return `<div class="ov card it-${ti.input_type}" data-ov="${i}" data-key="${esc(ti.item_key)}">
+  const numeric = ti.input_type === 'NUMBER' || ti.input_type === 'THREE_PHASE';
+  const off = ti.required === false && !!(ov && ov.off === true); // mẫu đổi mục sang bắt buộc thì không còn bỏ được
+  const own = !!ov && !off;
+  const cur = { ...ti, ...(own ? ov : {}) };
+  return `<div class="ov card it-${ti.input_type}${off ? ' is-off' : ''}" data-ov="${i}" data-key="${esc(ti.item_key)}">
     <div class="ie-head"><strong>${esc(ti.name_vi || ti.name_zh)}</strong>${ti.name_zh && ti.name_vi ? ` <span class="zh">${esc(ti.name_zh)}</span>` : ''}<span class="grow"></span>
-      <label class="check"><input type="checkbox" data-own${ov ? ' checked' : ''}><span>${bi('ov.own')}</span></label></div>
+      ${ti.required === false ? `<label class="check ov-off"><input type="checkbox" data-off${off ? ' checked' : ''}><span>${bi('ov.off')}</span></label>` : ''}
+      ${numeric ? `<label class="check ov-own"><input type="checkbox" data-own${own ? ' checked' : ''}><span>${bi('ov.own')}</span></label>` : ''}</div>
     <div class="muted small">${bi('ov.template_std')}: ${esc(stdText(ti, 'vi') || '—')}${warnText(ti) ? ' · ' + bi('chk.warn_at') + ' ' + esc(warnText(ti)) : ''}</div>
-    <div class="ov-body"${ov ? '' : ' hidden'}>
+    ${numeric ? `<div class="ov-body"${own ? '' : ' hidden'}>
       <input type="hidden" data-k="input_type" value="${esc(ti.input_type)}">
       ${fld('unit', 'ie.unit', txt('unit', cur.unit, 'maxlength="20"'))}
       ${stdFieldsHtml(cur)}
       <div class="ie-preview small"></div>
-    </div></div>`;
+    </div>` : ''}</div>`;
 }
 
 export function wireOverrides(root) {
   $$('.ov', root).forEach((box) => {
     const body = $('.ov-body', box);
+    const offBox = $('[data-off]', box), ownBox = $('[data-own]', box);
     const upd = () => {
-      body.hidden = !$('[data-own]', box).checked;
+      const off = !!(offBox && offBox.checked);
+      box.classList.toggle('is-off', off);
+      if (ownBox) ownBox.closest('label').hidden = off;
+      if (!body) return;
+      body.hidden = off || !ownBox.checked;
       const st = $('[data-k="std_type"]', box);
       $$('.sf', box).forEach((x) => { x.hidden = !x.classList.contains('sf-' + st.value); });
       $$('.only-3p', box).forEach((x) => { x.hidden = box.classList.contains('it-THREE_PHASE') === false; });
       const it = readOverride(box, []);
-      $('.ie-preview', box).innerHTML = it ? `${bi('chk.std')}: <b>${esc(stdText({ ...it, input_type: $('[data-k="input_type"]', box).value }, 'vi') || '—')}</b>` : '';
+      $('.ie-preview', box).innerHTML = it && !it.off ? `${bi('chk.std')}: <b>${esc(stdText({ ...it, input_type: $('[data-k="input_type"]', box).value }, 'vi') || '—')}</b>` : '';
     };
     upd();
     box.addEventListener('input', upd);
@@ -205,9 +222,11 @@ export function wireOverrides(root) {
   });
 }
 
-/** Tiêu chuẩn riêng đọc từ ô (null = dùng tiêu chuẩn của mẫu) */
+/** Tiêu chuẩn riêng đọc từ ô (null = dùng tiêu chuẩn của mẫu; {off: true} = máy này không có hạng mục) */
 export function readOverride(box, errs) {
-  if (!$('[data-own]', box).checked) return null;
+  const offBox = $('[data-off]', box), ownBox = $('[data-own]', box);
+  if (offBox && offBox.checked) return { off: true };
+  if (!ownBox || !ownBox.checked) return null;
   const it = readItem(box, errs, 'overrides.' + box.dataset.key + '.');
   const o = { unit: it.unit, std_type: it.std_type };
   ['std_min', 'std_max', 'std_nominal', 'std_tol_pct', 'warn_lo', 'warn_hi'].forEach((k) => { o[k] = it[k]; });

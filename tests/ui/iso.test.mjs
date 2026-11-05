@@ -11,6 +11,14 @@ const IPHONE = { viewport: { width: 390, height: 844 }, mobile: true };
 const WEB = { viewport: { width: 1440, height: 900 }, mobile: false };
 const go = (page, h) => page.evaluate((x) => { location.hash = x; }, h);
 const noOverflow = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+/** Chờ điều kiện phía máy chủ giả lập (vd. đã ghi xong) */
+async function until(fn, ms = 15000) {
+  const t0 = Date.now();
+  while (!fn()) {
+    if (Date.now() - t0 > ms) throw new Error('until: hết giờ chờ');
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
 
 function seeded() {
   const env = freshServer({ now: NOW });
@@ -64,9 +72,10 @@ test('web: Tạo bộ mẫu theo biểu ISO → bỏ chọn bớt → PIN → m�
     assert.equal(await page.inputValue('#f-form_code'), 'BM-CĐ-07-02');
     await page.fill('#f-form_code', 'BM-CĐ-07-02/B');
     await page.click('#tp-save');
-    await page.waitForFunction((id) => location.hash === '#/templates/' + id && document.querySelector('#f-form_code'), tpl.template_id, { timeout: 15000 });
+    // Chờ máy chủ ghi xong (ô nhập đã mang giá trị mới từ trước khi lưu nên không dùng làm mốc chờ)
+    await until(() => env.rows('Templates').find((t) => t.template_id === tpl.template_id).form_code === 'BM-CĐ-07-02/B');
+    await page.waitForFunction(() => /Đã lưu/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 15000 });
     await page.waitForFunction(() => document.querySelector('#f-form_code')?.value === 'BM-CĐ-07-02/B', null, { timeout: 15000 });
-    assert.equal(env.rows('Templates').find((t) => t.template_id === tpl.template_id).form_code, 'BM-CĐ-07-02/B');
     assert.ok(await noOverflow(page));
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
