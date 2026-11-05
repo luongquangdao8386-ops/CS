@@ -6,6 +6,7 @@ Cùng bố cục, màu sắc và lõi đăng nhập/đồng bộ với app M&E. 
 **Trạng thái:** bản `1.0.0-d1.1` — THỬ chạy từ 28/10/2026 (nối M&E THỬ); phát hành THẬT 28/10/2026 (`/CS/` → `CS_MayChu_THAT`, nối M&E THẬT 1.0.0-d4.12). Trang thử riêng `/CS-thu/` (repo `CS-thu`).
 Bản `1.0.0-d1.2` (30/10/2026, nhánh `claude/iso-templates`): bộ mẫu theo biểu ISO cơ điện BM-CĐ-xx + mã biểu mẫu trên PDF/Excel Bảng tháng — xem Phần J của HUONG_DAN_TRIEN_KHAI.md.
 Bản `1.0.0-d1.3` (05/11/2026, nhánh `claude/daily-templates`, phát hành THẬT 05/11/2026 — máy chủ THẬT/THỬ dán Code.gs theo Phần K): bộ mẫu hằng ngày 7 loại máy + bỏ mục "nếu có" theo từng máy — xem Phần K.
+Bản `1.0.0-d1.4` (05/11/2026, phát hành THẬT): số tiêu chuẩn đề xuất cho bộ mẫu hằng ngày (vượt là báo đỏ), mục phải đặt theo từng máy hiện "Chưa đặt tiêu chuẩn", nút *Cập nhật tiêu chuẩn đề xuất* cho mẫu đã tạo — xem Phần L.
 
 ## App làm gì
 

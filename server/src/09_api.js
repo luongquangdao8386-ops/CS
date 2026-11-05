@@ -26,6 +26,7 @@ var HANDLERS_ = {
   'template.archive': function (ctx) { return templateArchive_(ctx); },
   'template.isoList': function (ctx) { return templateIsoList_(ctx); },
   'template.isoSeed': function (ctx) { return templateIsoSeed_(ctx); },
+  'template.isoUpdate': function (ctx) { return templateIsoUpdate_(ctx); },
   'library.edit': function (ctx) { return libraryEdit_(ctx); },
   'assignment.edit': function (ctx) { return assignmentEdit_(ctx); },
   'assignment.add': function (ctx) { return assignmentAdd_(ctx); },

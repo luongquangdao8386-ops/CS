@@ -35,6 +35,7 @@ var ACTION_TABLE_ = [
   'template.archive|3|net|W',
   'template.isoList|3|net|R',
   'template.isoSeed|3|pin|W',
+  'template.isoUpdate|3|pin|W',
   'library.edit|3|net|W',
   'assignment.edit|3|net|W',
   'assignment.add|3|net|W',

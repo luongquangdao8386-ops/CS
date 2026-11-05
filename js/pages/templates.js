@@ -67,7 +67,8 @@ const PRESET_TEXT = {
 
 /**
  * Bộ mẫu soạn sẵn: theo biểu ISO cơ điện (BM-CĐ-xx) hoặc hằng ngày cho 7 loại máy (HN-xx). Máy chủ giữ sẵn nội dung;
- * chọn mẫu → PIN → tạo (chưa gán máy). Mẫu đã tạo (kể cả đã ngừng) không tạo lại.
+ * chọn mẫu → PIN → tạo (chưa gán máy). Mẫu đã tạo (kể cả đã ngừng) không tạo lại. Mẫu đã tạo mà bộ mẫu có tiêu chuẩn đề xuất mới
+ * (máy chủ đếm updatable) → nút "Cập nhật tiêu chuẩn đề xuất": chỉ điền chỗ còn trống, phiên bản mới, gán máy giữ nguyên.
  */
 async function isoDialog(btn, set) {
   const tx = PRESET_TEXT[set];
@@ -79,27 +80,32 @@ async function isoDialog(btn, set) {
   if ((r.data.set || 'ISO') !== set) { toast(bi('tpl.preset_old_server'), 'err'); return false; }
   const list = r.data.templates || [];
   const left = list.filter((t) => !t.exists);
+  const upd = list.filter((t) => t.exists && t.updatable > 0);
   const row = (t) => `<label class="check lib-pick iso-pick"><input type="checkbox" value="${esc(t.key)}"${t.exists ? ' disabled' : ' checked'}>
     <span><span class="code">${esc(t.form_code || t.key)}</span> ${esc(nameText(t))}
-    <span class="muted small"> · ${bi('freq_each.' + t.frequency)} · ${bi('home.items_n', { N: t.items })}${t.exists ? ` · <span class="badge t-grey">${bi('tpl.iso_exists', { C: t.template_code })}</span>` : ''}</span></span></label>`;
-  const keys = await dialog({
+    <span class="muted small"> · ${bi('freq_each.' + t.frequency)} · ${bi('home.items_n', { N: t.items })}${t.exists ? ` · <span class="badge t-grey">${bi('tpl.iso_exists', { C: t.template_code })}</span>` : ''}${t.exists && t.updatable > 0 ? ` <span class="tag warn">${bi('tpl.preset_updatable', { N: t.updatable })}</span>` : ''}</span></span></label>`;
+  const pick = await dialog({
     title: bi(tx.title),
     wide: true,
     body: `<p class="muted small">${bi(tx.hint)}</p>
       ${r.data.migrated === false ? `<p class="banner warn" id="iso-migrate">${bi('tpl.iso_migrate')}</p>` : ''}
       ${left.length ? `<label class="check"><input type="checkbox" id="iso-all" checked><span>${bi('tpl.iso_all', { N: left.length })}</span></label>` : `<p class="muted">${bi(tx.none)}</p>`}
+      ${upd.length ? `<p class="banner warn" id="iso-upd-hint">${bi('tpl.preset_update_hint', { N: upd.length })}</p>` : ''}
       <div class="lib-list" id="iso-list">${list.map(row).join('')}</div>`,
-    actions: [{ label: bi('btn.cancel'), value: null }].concat(left.length && r.data.migrated !== false
-      ? [{ label: bi('tpl.iso_create'), kind: 'primary', read: (w) => $$('#iso-list input:checked', w).map((i) => i.value) }] : []),
+    actions: [{ label: bi('btn.cancel'), value: null }]
+      .concat(upd.length ? [{ label: bi('tpl.preset_update', { N: upd.length }), kind: left.length ? '' : 'primary', value: { op: 'update', keys: upd.map((t) => t.key) } }] : [])
+      .concat(left.length && r.data.migrated !== false
+        ? [{ label: bi('tpl.iso_create'), kind: 'primary', read: (w) => ({ op: 'seed', keys: $$('#iso-list input:checked', w).map((i) => i.value) }) }] : []),
     onOpen: (w) => {
       const all = $('#iso-all', w);
       if (all) all.addEventListener('change', () => { $$('#iso-list input:not([disabled])', w).forEach((i) => { i.checked = all.checked; }); });
     }
   });
-  if (!keys || !keys.length) return false;
+  if (!pick || !pick.keys || !pick.keys.length) return false;
   busy(btn, true);
-  const res = await writeWithPin('template.isoSeed', { keys });
+  const res = await writeWithPin(pick.op === 'update' ? 'template.isoUpdate' : 'template.isoSeed', { keys: pick.keys });
   busy(btn, false);
+  if (res.ok && pick.op === 'update') { toast(bi('tpl.preset_updated', { N: (res.data.updated || []).length }), 'ok'); await afterCommit(); return true; }
   if (res.ok) { toast(bi('tpl.iso_created', { N: (res.data.created || []).length }), 'ok'); await afterCommit(); return true; }
   writeFail(res);
   return false;

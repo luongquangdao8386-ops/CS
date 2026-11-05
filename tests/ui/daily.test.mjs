@@ -18,7 +18,7 @@ function seeded(withDaily = false) {
   const owner = ownerClient(env);
   env.g.dbReset_();
   env.g.seedSample_('SYSTEM');
-  const out = { env };
+  const out = { env, owner };
   if (withDaily) {
     owner.pin(OWNER_PIN);
     const r = owner.write('template.isoSeed', { keys: ['HN-02', 'HN-06'] });
@@ -110,6 +110,7 @@ test('web: Tiêu chuẩn riêng của chiller — bỏ hai mục nước giải 
     await page.click('.modal-actions .btn.primary');
     await page.waitForFunction(() => document.querySelector('.view')?.textContent.includes('2 mục máy không có'), null, { timeout: 15000 });
     assert.ok((await page.textContent('.view')).includes('1 tiêu chuẩn riêng'));
+    assert.ok((await page.textContent('.view')).includes('2 mục chưa đặt tiêu chuẩn'), 'áp suất hút/đẩy môi chất chờ đặt theo loại gas');
     const ov = env.rows('Assignments').find((a) => a.assignment_id === s.chillerAsg).overrides_json;
     assert.equal(Object.values(ov).filter((o) => o.off === true).length, 2);
     // Màn kiểm: 10 hạng mục, không có nước giải nhiệt, có chọn mức Đủ / Thấp / Dưới min, dòng máy nén ≤ 95 %
@@ -118,7 +119,13 @@ test('web: Tiêu chuẩn riêng của chiller — bỏ hai mục nước giải 
     assert.equal(await page.locator('.ci').count(), 10);
     const t = await page.textContent('.check-page');
     assert.ok(!t.includes('nước giải nhiệt'));
-    for (const x of ['Dưới min', 'Thấp', 'Đủ', '≤ 95 %', 'Theo cài đặt', 'Dàn ngưng sạch']) assert.ok(t.includes(x), x);
+    for (const x of ['Dưới min', 'Thấp', 'Đủ', '≤ 95 %', '10 – 13 °C', '6 – 8 °C', 'Dàn ngưng sạch']) assert.ok(t.includes(x), x);
+    assert.equal(await page.locator('.ci-need').count(), 2, 'áp suất hút/đẩy môi chất: Chưa đặt tiêu chuẩn');
+    // Gõ nước lạnh ra 9 °C → Không đạt (đỏ) ngay
+    const outIdx = await page.evaluate(() => [...document.querySelectorAll('.ci')].findIndex((c) => c.textContent.includes('Nhiệt độ nước lạnh ra')));
+    await page.fill('#v-' + outIdx, '9');
+    await page.waitForFunction((i) => /Không đạt/.test(document.querySelector('#pill-' + i)?.textContent || ''), outIdx);
+    assert.ok(await page.locator('#ci-' + outIdx + '.st-fail').count() === 1, 'thẻ hạng mục tô đỏ');
     assert.ok(await noOverflow(page));
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
@@ -143,6 +150,7 @@ test('iPhone: hộp bộ mẫu hằng ngày không tràn ngang; màn kiểm phò
     assert.ok(t.includes('380 V ± 5 % (361 – 399 V) mỗi pha, lệch ≤ 10 %'));
     assert.ok(t.includes('Theo định mức tủ, lệch ≤ 10 %'));
     assert.ok(t.includes('≤ 35 °C'));
+    assert.equal(await page.locator('.ci-need').count(), 1, 'dòng điện tổng: Chưa đặt tiêu chuẩn tới khi đặt định mức tủ');
     assert.ok(!t.includes('chỉ ghi số'), 'mục Đạt/Không đạt: tên mục là tiêu chuẩn, không hiện "Không có tiêu chuẩn"');
     // Gõ điện áp 405/406/404 → Không đạt (vượt 399 V) ngay trên máy
     await page.fill('#v-1-0', '405');
@@ -151,6 +159,50 @@ test('iPhone: hộp bộ mẫu hằng ngày không tràn ngang; màn kiểm phò
     await page.waitForFunction(() => /Không đạt/.test(document.querySelector('#pill-1')?.textContent || ''));
     assert.ok(await noOverflow(page));
     await page.screenshot({ path: path.join(SHOTS, 'd13-iphone-check-room.png'), fullPage: true });
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
+test('web: mẫu đã tạo từ bản trước còn Không đặt → hộp bộ mẫu hằng ngày có nút Cập nhật tiêu chuẩn đề xuất → PIN → mẫu lên phiên bản mới có số', async () => {
+  const s = seeded(true);
+  const { env } = s;
+  // Đưa mẫu phòng điện về như lúc tạo ở bản d1.3: phòng ≤ 35 chưa có ngưỡng Cần chú ý, dòng tổng chưa có cờ phải đặt
+  const tid = env.g.isoUuid_('HN-02');
+  const FIELDS = ['item_key', 'group_key', 'name_vi', 'name_zh', 'input_type', 'unit', 'std_type', 'std_min', 'std_max', 'std_nominal', 'std_tol_pct',
+    'warn_lo', 'warn_hi', 'choices_json', 'extra_json', 'std_text_vi', 'std_text_zh', 'how_vi', 'how_zh', 'required', 'photo_on_fail', 'library_item_id'];
+  const items = env.rows('TemplateItems').filter((x) => x.template_id === tid).sort((a, b) => a.step_no - b.step_no).map((x) => {
+    const o = {}; FIELDS.forEach((f) => { o[f] = x[f]; });
+    if (x.name_vi === 'Nhiệt độ phòng') o.warn_hi = null;
+    if (x.name_vi === 'Dòng điện tổng') o.extra_json = { imb_max: 10 };
+    return o;
+  });
+  const r = s.owner.write('template.edit', { template_id: tid, items }, { expected_version: 1 });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const app = await openApp({ env, now: NOW, ...WEB });
+  const { page } = app;
+  try {
+    await login(page);
+    await go(page, '#/templates');
+    await page.click('#tp-daily');
+    await page.waitForSelector('.modal #iso-list');
+    assert.ok((await page.textContent('.modal')).includes('2 mục có số đề xuất mới'));
+    assert.ok(await page.locator('#iso-upd-hint').isVisible());
+    await page.screenshot({ path: path.join(SHOTS, 'd14-web-preset-update.png') });
+    await page.click('.modal-actions .btn:has-text("Cập nhật tiêu chuẩn đề xuất")');
+    await page.waitForSelector('.modal .pin-input');
+    await page.fill('.modal .pin-input', OWNER_PIN);
+    await page.click('.modal-actions .btn.primary');
+    await page.waitForFunction(() => /Đã cập nhật 1 mẫu/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 15000 });
+    const t = env.rows('Templates').find((x) => x.template_id === tid);
+    assert.equal(t.revision, 3);
+    const cur = env.rows('TemplateItems').filter((x) => x.template_id === tid && x.revision === 3);
+    assert.equal(cur.find((x) => x.name_vi === 'Nhiệt độ phòng').warn_hi, 32);
+    assert.equal(cur.find((x) => x.name_vi === 'Dòng điện tổng').extra_json.need_std, true);
+    // Mở lại: hết mục để cập nhật
+    await page.click('#tp-daily');
+    await page.waitForSelector('.modal #iso-list');
+    assert.equal(await page.locator('#iso-upd-hint').count(), 0);
+    await page.click('.modal-actions .btn:not(.primary)');
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });

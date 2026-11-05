@@ -2,7 +2,8 @@
 // tests/server/judge.test.mjs so hai bản trên cùng bộ ví dụ). App dùng để tô màu ngay khi gõ; máy chủ đánh giá lại khi lưu.
 
 export const STD_FIELDS = ['unit', 'std_type', 'std_min', 'std_max', 'std_nominal', 'std_tol_pct', 'warn_lo', 'warn_hi', 'choices_json', 'extra_json', 'std_text_vi', 'std_text_zh'];
-const ITEM_COPY = ['item_key', 'template_item_id', 'step_no', 'group_key', 'name_vi', 'name_zh', 'input_type', 'how_vi', 'how_zh', 'required', 'photo_on_fail', 'i18n_meta'];
+const STD_LIMITS = ['std_min', 'std_max', 'std_nominal', 'std_tol_pct', 'warn_lo', 'warn_hi'];
+const ITEM_COPY =['item_key', 'template_item_id', 'step_no', 'group_key', 'name_vi', 'name_zh', 'input_type', 'how_vi', 'how_zh', 'required', 'photo_on_fail', 'i18n_meta'];
 export const DEFAULT_SHIFTS = [{ no: 1, start: '06:00', end: '14:00' }, { no: 2, start: '14:00', end: '22:00' }, { no: 3, start: '22:00', end: '06:00' }];
 
 export function numOrNull(v) {
@@ -22,6 +23,8 @@ export function effItem(ti, overrides) {
   if (ov && typeof ov === 'object') {
     let own = false;
     STD_FIELDS.forEach((f) => { if (ov[f] !== undefined && ov[f] !== null && ov[f] !== '') { o[f] = ov[f]; own = true; } });
+    // Tiêu chuẩn riêng là trọn bộ: giới hạn, ngưỡng Cần chú ý để trống ở máy = không có (không lấy ngưỡng của mẫu)
+    if (ov.std_type) STD_LIMITS.forEach((f) => { o[f] = ov[f] === undefined || ov[f] === '' ? null : ov[f]; });
     if (own) o.overridden = true;
     if (ov.off === true && ti.required === false) o.off = true;
   }
@@ -32,6 +35,11 @@ export function effItem(ti, overrides) {
 export function offSkip(it, runs) {
   if (!it.off) return false;
   return !(runs || []).some((r) => (r.results_json || []).some((x) => x.item_key === it.item_key && x.result && x.result !== 'EMPTY'));
+}
+
+/** Hạng mục số còn Không đặt mà mỗi máy phải đặt số (cờ need_std của mẫu); it = hạng mục hiệu lực của máy hoặc của mẫu */
+export function needStd(it) {
+  return (it.input_type === 'NUMBER' || it.input_type === 'THREE_PHASE') && (it.std_type || 'NONE') === 'NONE' && !!(it.extra_json && it.extra_json.need_std);
 }
 
 export function stdBounds(it) {

@@ -57,6 +57,7 @@ var SUB_MSG = {
   ITEMS_REQUIRED: ['Mẫu cần ít nhất một hạng mục', '模板至少需要一个项目'],
   SHIFTS_REQUIRED: ['Kiểm theo ca: chọn ít nhất một ca', '按班点检：至少选择一个班次'],
   ISO_ALL_EXIST: ['Các mẫu đã chọn đều đã được tạo', '所选模板均已创建'],
+  ISO_NOTHING_TO_UPDATE: ['Các mẫu đã chọn không còn tiêu chuẩn đề xuất nào để điền', '所选模板没有可填写的建议标准'],
   MIGRATE_REQUIRED: ['Máy chủ chưa chạy migrateSchema (thiếu cột form_code)', '服务器尚未运行migrateSchema（缺少form_code列）'],
   FORM_CODE_LONG: ['Mã biểu mẫu tối đa 40 ký tự', '表单编号最多40个字符'],
   OFF_REQUIRED: ['Chỉ bỏ được hạng mục không bắt buộc (mục "nếu có")', '只能取消非必填项目（“如有”项目）'],

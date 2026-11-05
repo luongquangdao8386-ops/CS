@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.3 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026; d1.3 bộ mẫu hằng ngày 7 loại máy)
+# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.4 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026; d1.3 bộ mẫu hằng ngày 7 loại máy; d1.4 số tiêu chuẩn đề xuất)
 
 Checksheet là app riêng, máy chủ riêng (dự án Apps Script riêng, bảng tính riêng), chỉ **đọc** danh sách thiết bị và khu vực từ M&E.
 Cách làm giống hệt M&E: dán `Code.gs` vào Apps Script, triển khai web app, mở trang app trên GitHub Pages.
@@ -179,6 +179,42 @@ Checksheet chỉ gán mẫu cho **thiết bị lấy từ M&E**. Phòng điện 
    - Bơm: *Dòng điện động cơ* → *Không quá* = dòng định mức trên nhãn; *Áp suất hút / đẩy* → *Trong khoảng* theo thiết kế.
      Bơm không có biến tần → tích **Máy này không có** ở *Biến tần*; bơm nước lạnh (không cấp tháp) → tích **Máy này không có** ở *Tháp giải nhiệt*.
    - Bơm dự phòng đang đứng: vẫn kiểm mục "Bơm chạy; bơm dự phòng ở AUTO"; số đo bỏ trống và ghi chú "dự phòng" (phiếu hiện *Chưa đủ*).
+
+## Phần L — Bản 1.0.0-d1.4: số tiêu chuẩn đề xuất cho bộ mẫu hằng ngày (vượt là báo đỏ)
+
+Các mục số trước để "theo nhà sản xuất / cài đặt / thiết kế" nay có **số đề xuất** (người dùng duyệt 05/11/2026). Gõ số vượt tiêu chuẩn
+thì ô tô **đỏ** (Không đạt, bắt buộc ghi chú, vào Chờ xử lý), vào vùng Cần chú ý thì tô **vàng**. Số nào cũng sửa được ở mẫu hoặc
+**Tiêu chuẩn riêng** của từng máy.
+
+| Mẫu | Hạng mục | Tiêu chuẩn (vàng = Cần chú ý) |
+| --- | --- | --- |
+| HN-01 Máy phát | Điện áp ắc quy | 24 – 28,8 V, vàng ≤ 25 V (máy ắc quy 12 V: đặt riêng 12 – 14,4 V) |
+| HN-02 Phòng điện | Nhiệt độ phòng · cos φ | ≤ 35 °C (vàng ≥ 32) · ≥ 0,9 (vàng ≤ 0,92) |
+| HN-03 Máy nén khí | Áp suất khí ra · nhiệt độ đầu nén · phòng máy | 6 – 8 bar (vàng ≤ 6,3) · 70 – 100 °C (vàng ≥ 95) · ≤ 40 °C (vàng ≥ 37) |
+| HN-04 Máy sấy lạnh | Điểm sương | ≤ 10 °C (vàng ≥ 7) |
+| HN-05 Máy sấy hấp thụ | Áp suất tháp làm việc | 6 – 8 bar |
+| HN-06 Chiller | Nước lạnh vào · ra | 10 – 13 °C · 6 – 8 °C |
+| HN-06 Chiller | Nước giải nhiệt vào · ra | ≤ 32 °C · ≤ 37 °C |
+| HN-06 Chiller | Dòng máy nén | ≤ 100 % tải (vàng ≥ 95 %); máy hiện A: đặt riêng đơn vị A |
+
+**Mục phải đặt theo từng máy** (không có số chung): dòng điện tổng phòng điện (định mức tủ), áp suất hút/đẩy môi chất chiller
+(theo loại gas), áp suất hút/đẩy và dòng động cơ của bơm. Màn kiểm hiện chữ cam **Chưa đặt tiêu chuẩn**, thẻ mẫu ở màn máy hiện
+**"N mục chưa đặt tiêu chuẩn"** cho tới khi Trưởng bộ phận đặt ở **Thiết bị → máy → Tiêu chuẩn riêng** (tích *Dùng tiêu chuẩn riêng* →
+chọn kiểu → nhập số → Lưu). Gas thường gặp, áp suất đồng hồ (bar): R134a hút 1,8 – 3,5 · đẩy 6 – 13; R410A hút 6,5 – 9,5 · đẩy 20 – 34;
+R22/R407C hút 3,8 – 5,5 · đẩy 12 – 19 — đối chiếu tài liệu chiller trước khi đặt. Số giờ chạy là số cộng dồn nên chỉ ghi.
+
+Sửa thêm: tiêu chuẩn riêng của máy là **trọn bộ** — ô Cần chú ý để trống ở máy thì máy đó không có ngưỡng Cần chú ý (trước đây lấy
+ngưỡng của mẫu dù ô để trống). Trong ô sửa hạng mục của mẫu có thêm tích **Mỗi máy phải đặt số (theo nhãn máy)** (khi Kiểu tiêu chuẩn
+là *Chỉ ghi số*).
+
+### Cập nhật (không cần migrateSchema)
+
+1. **THẬT** (`CS_MayChu_THAT`) rồi **THỬ** (`CS_MayChu_THU`): **Sao lưu ngay** → dán `Code.gs` mới → **Lưu** → **Triển khai → Quản lý các bản
+   triển khai** → bút chì → **Phiên bản mới** → **Triển khai**.
+2. App: **Tải lại bản mới** → **Mẫu checksheet → Tạo bộ mẫu hằng ngày**. Mẫu đã tạo ở bản d1.3 hiện **"N mục có số đề xuất mới"** →
+   bấm **Cập nhật tiêu chuẩn đề xuất (… mẫu)** → PIN. Chỉ điền mục còn *Không đặt* và ngưỡng Cần chú ý còn trống — số anh/chị đã sửa giữ
+   nguyên; mẫu lên phiên bản mới, máy đã gán và tiêu chuẩn riêng giữ nguyên; lượt kiểm cũ giữ tiêu chuẩn lúc kiểm.
+3. **Thiết bị** → từng phòng điện, chiller, bơm có chữ cam *N mục chưa đặt tiêu chuẩn* → **Tiêu chuẩn riêng** → đặt số.
 
 ## Lưu ý an toàn
 

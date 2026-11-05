@@ -3,7 +3,8 @@
 
 /** Trường tiêu chuẩn được ghi đè theo từng máy (Assignments.overrides_json, khóa theo item_key) */
 var STD_FIELDS_ = ['unit', 'std_type', 'std_min', 'std_max', 'std_nominal', 'std_tol_pct', 'warn_lo', 'warn_hi', 'choices_json', 'extra_json', 'std_text_vi', 'std_text_zh'];
-var ITEM_COPY_FIELDS_ = ['item_key', 'template_item_id', 'step_no', 'group_key', 'name_vi', 'name_zh', 'input_type', 'how_vi', 'how_zh', 'required', 'photo_on_fail'];
+var STD_LIMIT_FIELDS_ = ['std_min', 'std_max', 'std_nominal', 'std_tol_pct', 'warn_lo', 'warn_hi'];
+var ITEM_COPY_FIELDS_ =['item_key', 'template_item_id', 'step_no', 'group_key', 'name_vi', 'name_zh', 'input_type', 'how_vi', 'how_zh', 'required', 'photo_on_fail'];
 
 function numOrNull_(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -22,6 +23,8 @@ function effItem_(ti, overrides) {
   if (ov && typeof ov === 'object') {
     var own = false;
     STD_FIELDS_.forEach(function (f) { if (ov[f] !== undefined && ov[f] !== null && ov[f] !== '') { o[f] = ov[f]; own = true; } });
+    // Tiêu chuẩn riêng là trọn bộ: giới hạn, ngưỡng Cần chú ý để trống ở máy = không có (không lấy ngưỡng của mẫu)
+    if (ov.std_type) STD_LIMIT_FIELDS_.forEach(function (f) { o[f] = ov[f] === undefined || ov[f] === '' ? null : ov[f]; });
     if (own) o.overridden = true;
     if (ov.off === true && ti.required === false) o.off = true;
   }

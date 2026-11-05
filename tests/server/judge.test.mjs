@@ -50,6 +50,14 @@ test('đánh giá và chữ tiêu chuẩn: app = máy chủ', () => {
   const ti = { item_key: 'k1', input_type: 'NUMBER', unit: '°C', std_type: 'MAX', std_max: 60 };
   const ov = { k1: { std_type: 'MAX', std_max: 65, warn_hi: 62 } };
   for (const v of [59, 61, 63, 66]) assert.equal(J.judgeItem(J.effItem(ti, ov), { value: v }).result, g.judgeItem_(g.effItem_(ti, ov), { value: v }).result);
+  // Tiêu chuẩn riêng là trọn bộ: ngưỡng Cần chú ý để trống ở máy không lấy ngưỡng của mẫu
+  const ti2 = { item_key: 'k2', input_type: 'NUMBER', unit: '°C', std_type: 'RANGE', std_min: 70, std_max: 100, warn_hi: 95 };
+  const ov2 = { k2: { unit: '°C', std_type: 'MAX', std_min: null, std_max: 110, std_nominal: null, std_tol_pct: null, warn_lo: null, warn_hi: null, extra_json: null } };
+  for (const v of [60, 96, 105, 111]) {
+    assert.equal(J.judgeItem(J.effItem(ti2, ov2), { value: v }).result, g.judgeItem_(g.effItem_(ti2, ov2), { value: v }).result, String(v));
+  }
+  assert.deepEqual([60, 96, 105, 111].map((v) => J.judgeItem(J.effItem(ti2, ov2), { value: v }).result), ['OK', 'OK', 'OK', 'FAIL']);
+  assert.equal(J.stdText(J.effItem(ti2, ov2)), '≤ 110 °C');
   assert.ok(n > 300);
 });
 

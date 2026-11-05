@@ -2,7 +2,7 @@
 // Kiểu nhập: số · dòng 3 pha · chọn mức · đạt/không đạt · ghi chữ. Kiểu tiêu chuẩn: khoảng · tối đa · tối thiểu · định mức ± % · không có.
 import { bi, biText, esc } from './core.js';
 import { $, $$, ICON } from './ui.js';
-import { stdText, warnText, fmtNumVi } from './judge.js';
+import { stdText, warnText, fmtNumVi, needStd } from './judge.js';
 import { parseNum } from './pages/check.js';
 
 export const INPUT_TYPES = ['NUMBER', 'THREE_PHASE', 'CHOICE', 'PASS_FAIL', 'TEXT'];
@@ -21,8 +21,8 @@ const fld = (k, labelKey, inner, cls = '') => `<div class="fld ${cls}" data-fiel
 const txt = (k, v, extra = '') => `<input class="inp" type="text" data-k="${k}" value="${esc(v ?? '')}" autocomplete="off" ${extra}>`;
 const num = (k, v) => `<input class="inp" type="text" inputmode="decimal" data-k="${k}" value="${esc(numVal(v))}" autocomplete="off">`;
 
-/** Phần tiêu chuẩn số (dùng cả ở tiêu chuẩn riêng theo máy) */
-export function stdFieldsHtml(it) {
+/** Phần tiêu chuẩn số (dùng cả ở tiêu chuẩn riêng theo máy). needStd: có ô "Mỗi máy phải đặt số" (chỉ ở mẫu, thư viện) */
+export function stdFieldsHtml(it, { needStd = false } = {}) {
   const st = it.std_type || 'NONE';
   const ex = it.extra_json || {};
   return `<div class="ie-std form-grid" data-for="NUMBER THREE_PHASE">
@@ -35,6 +35,7 @@ export function stdFieldsHtml(it) {
       ${fld('warn_hi', 'ie.warn_hi', num('warn_hi', it.warn_hi))}
       ${fld('imb_max', 'ie.imb_max', num('imb_max', ex.imb_max ?? (it.input_type === 'THREE_PHASE' ? 10 : '')), 'only-3p')}
       ${fld('imb_warn', 'ie.imb_warn', num('imb_warn', ex.imb_warn), 'only-3p')}
+      ${needStd ? `<div class="fld sf sf-NONE ie-need" data-field="need_std"><label class="check"><input type="checkbox" data-k="need_std"${ex.need_std ? ' checked' : ''}><span>${bi('ie.need_std')}</span></label></div>` : ''}
     </div>`;
 }
 
@@ -66,7 +67,7 @@ export function itemEditorHtml(it, i, { move = false, del = false, count = 0, cl
       ${fld('input_type', 'ie.input_type', `<select class="inp sel" data-k="input_type">${INPUT_TYPES.map((x) => opt(x, t, biText('input_type.' + x))).join('')}</select>`)}
       ${fld('unit', 'ie.unit', txt('unit', it.unit, 'maxlength="20" placeholder="°C, bar, A…"'), 'only-num')}
     </div>
-    ${stdFieldsHtml({ ...it, input_type: t })}
+    ${stdFieldsHtml({ ...it, input_type: t }, { needStd: true })}
     <div class="ie-choices" data-field="choices_json"><label class="lbl">${bi('ie.choices')}</label>
       <div class="ch-list">${choices.map(choiceRow).join('')}</div>
       <button type="button" class="btn tiny" data-ch-add>${ICON.plus}<span>${bi('ie.choice_add')}</span></button><div class="ferr"></div></div>
@@ -111,6 +112,8 @@ export function readItem(box, errs = [], prefix = '') {
       it.extra_json = { imb_max: im === null ? 10 : im };
       if (iw !== null) it.extra_json.imb_warn = iw;
     }
+    // Không đặt nhưng mỗi máy phải đặt số theo nhãn máy → màn kiểm hiện "Chưa đặt tiêu chuẩn"
+    if (it.std_type === 'NONE' && g('need_std') === true) it.extra_json = { ...(it.extra_json || {}), need_std: true };
   } else {
     it.unit = '';
   }
@@ -191,7 +194,7 @@ export function overrideEditorHtml(ti, ov, i) {
     <div class="ie-head"><strong>${esc(ti.name_vi || ti.name_zh)}</strong>${ti.name_zh && ti.name_vi ? ` <span class="zh">${esc(ti.name_zh)}</span>` : ''}<span class="grow"></span>
       ${ti.required === false ? `<label class="check ov-off"><input type="checkbox" data-off${off ? ' checked' : ''}><span>${bi('ov.off')}</span></label>` : ''}
       ${numeric ? `<label class="check ov-own"><input type="checkbox" data-own${own ? ' checked' : ''}><span>${bi('ov.own')}</span></label>` : ''}</div>
-    <div class="muted small">${bi('ov.template_std')}: ${esc(stdText(ti, 'vi') || '—')}${warnText(ti) ? ' · ' + bi('chk.warn_at') + ' ' + esc(warnText(ti)) : ''}</div>
+    <div class="muted small">${bi('ov.template_std')}: ${esc(stdText(ti, 'vi') || '—')}${warnText(ti) ? ' · ' + bi('chk.warn_at') + ' ' + esc(warnText(ti)) : ''}${needStd(ti) && !own && !off ? ` <span class="tag warn">${bi('ov.need_std')}</span>` : ''}</div>
     ${numeric ? `<div class="ov-body"${own ? '' : ' hidden'}>
       <input type="hidden" data-k="input_type" value="${esc(ti.input_type)}">
       ${fld('unit', 'ie.unit', txt('unit', cur.unit, 'maxlength="20"'))}

@@ -123,6 +123,8 @@ function normStd_(p, errs, prefix) {
       it.extra_json = { imb_max: imbMax === null ? 10 : imbMax };
       if (imbWarn !== null) it.extra_json.imb_warn = imbWarn;
     }
+    // Không đặt nhưng mỗi máy phải đặt số theo nhãn máy (dòng định mức, áp suất thiết kế…): màn kiểm hiện "Chưa đặt tiêu chuẩn"
+    if (it.std_type === 'NONE' && p.extra_json && p.extra_json.need_std === true) it.extra_json = Object.assign(it.extra_json || {}, { need_std: true });
   } else if (it.input_type === 'CHOICE') {
     var cs = Array.isArray(p.choices_json) ? p.choices_json : [];
     var seen = {}, okN = 0, bad = cs.length < 2 || cs.length > 8;

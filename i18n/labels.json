@@ -720,7 +720,15 @@
   "tpl.iso_migrate": ["Máy chủ chưa chạy migrateSchema sau khi dán mã mới — Quản trị chạy migrateSchema trong Apps Script rồi thử lại", "服务器粘贴新代码后尚未运行migrateSchema——请管理员在Apps Script中运行migrateSchema后重试"],
   "tpl.daily_btn": ["Tạo bộ mẫu hằng ngày", "创建每日点检模板"],
   "tpl.daily_title": ["Bộ mẫu kiểm tra hằng ngày (7 loại máy)", "每日点检模板（7类设备）"],
-  "tpl.daily_hint": ["Mẫu soạn sẵn cho máy phát điện, phòng điện, máy nén khí, máy sấy lạnh, máy sấy hấp thụ, chiller và bơm chiller; kiểm theo ngày (đổi sang theo ca ở Sửa mẫu). Tiêu chuẩn \"theo nhà sản xuất / cài đặt / thiết kế\" để Không đặt — đặt số ở mẫu hoặc ở Tiêu chuẩn riêng của từng máy. Mục \"nếu có\" mà máy không có: bỏ ở Tiêu chuẩn riêng của máy. Tạo xong mẫu chưa gán máy.", "为发电机、配电室、空压机、冷冻式干燥机、吸附式干燥机、冷水机组及冷水系统水泵预制的模板；按日点检（可在编辑模板中改为按班）。“按厂家/设定/设计”的标准设为不设定——请在模板或各设备的专用标准中设定数值。本机没有的“如有”项目：在设备专用标准中取消。创建后尚未分配设备。"],
+  "tpl.daily_hint": ["Mẫu soạn sẵn cho máy phát điện, phòng điện, máy nén khí, máy sấy lạnh, máy sấy hấp thụ, chiller và bơm chiller; kiểm theo ngày (đổi sang theo ca ở Sửa mẫu). Có sẵn số tiêu chuẩn đề xuất — vượt là báo đỏ; sửa ở mẫu hoặc ở Tiêu chuẩn riêng của từng máy. Mục phụ thuộc nhãn máy (dòng định mức, áp suất thiết kế, áp suất môi chất) hiện \"Chưa đặt tiêu chuẩn\" tới khi đặt ở Tiêu chuẩn riêng. Mục \"nếu có\" máy không có: bỏ ở Tiêu chuẩn riêng. Tạo xong mẫu chưa gán máy.", "为发电机、配电室、空压机、冷冻式干燥机、吸附式干燥机、冷水机组及冷水系统水泵预制的模板；按日点检（可在编辑模板中改为按班）。已带建议标准值——超出即显示红色；可在模板或各设备的专用标准中修改。取决于设备铭牌的项目（额定电流、设计压力、冷媒压力）显示“尚未设定标准”，直至在专用标准中设定。本机没有的“如有”项目：在专用标准中取消。创建后尚未分配设备。"],
   "tpl.daily_none_left": ["Đã tạo đủ các mẫu hằng ngày", "每日点检模板已全部创建"],
-  "tpl.preset_old_server": ["Máy chủ chưa có bộ mẫu này — dán Code.gs mới và tạo Phiên bản mới rồi thử lại", "服务器尚无此模板集——请粘贴新的Code.gs并创建新版本后重试"]
+  "tpl.preset_old_server": ["Máy chủ chưa có bộ mẫu này — dán Code.gs mới và tạo Phiên bản mới rồi thử lại", "服务器尚无此模板集——请粘贴新的Code.gs并创建新版本后重试"],
+  "tpl.preset_updatable": ["{N} mục có số đề xuất mới", "{N}项有新的建议值"],
+  "tpl.preset_update_hint": ["{N} mẫu đã tạo có tiêu chuẩn đề xuất mới. Cập nhật chỉ điền mục còn Không đặt / ngưỡng Cần chú ý còn trống, không đè số đã sửa; mẫu lên phiên bản mới, máy đã gán và tiêu chuẩn riêng giữ nguyên.", "{N}个已创建的模板有新的建议标准。更新只填写仍为不设定的项目/空白的需关注阈值，不覆盖已修改的数值；模板升级为新版本，已分配设备及专用标准保持不变。"],
+  "tpl.preset_update": ["Cập nhật tiêu chuẩn đề xuất ({N} mẫu)", "更新建议标准（{N}个模板）"],
+  "tpl.preset_updated": ["Đã cập nhật {N} mẫu (phiên bản mới)", "已更新{N}个模板（新版本）"],
+  "ie.need_std": ["Mỗi máy phải đặt số (theo nhãn máy) — màn kiểm báo \"Chưa đặt tiêu chuẩn\"", "每台设备须设定数值（按铭牌）——点检画面提示“尚未设定标准”"],
+  "ov.need_std": ["Chưa đặt — cần đặt cho máy này", "未设定——需为本机设定"],
+  "chk.need_std": ["Chưa đặt tiêu chuẩn", "尚未设定标准"],
+  "mac.need_std_n": ["{N} mục chưa đặt tiêu chuẩn — bấm Tiêu chuẩn riêng", "{N}项尚未设定标准——请点“专用标准”"]
 }

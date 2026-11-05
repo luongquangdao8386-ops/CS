@@ -5,7 +5,7 @@ import { bi, biText, esc, session, uuid, isoNowVN, fmtDate, fmtDateTime, nameTex
 import { ICON, toast, dialog, $, $$ } from '../ui.js';
 import { enqueue } from '../sync.js';
 import { byId, recs, templateItems, roleLevel, can, today, nowMs, shifts, dayLocked, users, userName, queuedRuns } from '../data.js';
-import { effItem, judgeItem, stdText, warnText, fmtNumVi, stdBounds, currentPeriod, periodKey, periodSpan, addDaysIso, isoWeekKey } from '../judge.js';
+import { effItem, judgeItem, stdText, warnText, fmtNumVi, stdBounds, currentPeriod, periodKey, periodSpan, addDaysIso, isoWeekKey, needStd } from '../judge.js';
 import { loadFormDraft, saveFormDraft, clearFormDraft } from '../form.js';
 import { processPhoto } from '../media.js';
 import { app, syncNow, updateSyncStatus, refreshAfterSend } from '../app.js';
@@ -173,7 +173,8 @@ export async function renderCheck(view, { shell, params, query }) {
     const w = warnText(it);
     const pv = prevVal.get(it.item_key);
     const std = s ? `${bi('chk.std')}: <b>${esc(s)}</b>${z && z !== s ? ` <span class="zh">${esc(z)}</span>` : ''}` : '';
-    return [std, w ? `${bi('chk.warn_at')} ${esc(w)}` : '', it.overridden ? `<span class="tag">${bi('chk.own_std')}</span>` : '', pv ? `${bi('chk.prev')}: ${esc(pv)}` : ''].filter(Boolean).join(' · ');
+    const need = needStd(it) ? `<span class="tag warn ci-need">${bi('chk.need_std')}</span>` : '';
+    return [std, w ? `${bi('chk.warn_at')} ${esc(w)}` : '', it.overridden ? `<span class="tag">${bi('chk.own_std')}</span>` : '', need, pv ? `${bi('chk.prev')}: ${esc(pv)}` : ''].filter(Boolean).join(' · ');
   };
   const inputHtml = (it, i) => {
     const v = vals[it.item_key];

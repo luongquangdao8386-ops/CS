@@ -9,6 +9,7 @@ import { app, afterCommit } from '../app.js';
 import { overrideEditorHtml, wireOverrides, readOverride, hasOverride } from '../std-edit.js';
 import { stateBadge, freqText } from './today.js';
 import { periodLabel } from './check.js';
+import { effItem, needStd } from '../judge.js';
 
 // Mặc định hiện mọi máy đang dùng (máy chưa gán mẫu cũng thấy, để gán mẫu)
 const filt = { q: '', area: '', only: 'all' };
@@ -101,6 +102,9 @@ export async function renderMachine(view, { shell, params }) {
   const dis = online ? '' : ' disabled';
   const active = asgs.filter((a) => a.active);
   const stopped = asgs.filter((a) => !a.active);
+  // Số hạng mục mỗi máy phải đặt số mà máy này chưa đặt (Tiêu chuẩn riêng) — Trưởng bộ phận đặt để vượt là báo đỏ
+  const missStd = new Map();
+  if (c3) for (const a of active) missStd.set(a.assignment_id, (await templateItems(a.template_id)).filter((ti) => needStd(effItem(ti, a.overrides_json)) && !effItem(ti, a.overrides_json).off).length);
   const asgCard = (a) => {
     const t = tpls.get(a.template_id);
     if (!t) return '';
@@ -110,6 +114,7 @@ export async function renderMachine(view, { shell, params }) {
     return `<div class="card asg-card">
       <div class="row between"><strong>${esc(nameText(t))}</strong>${d && d.period ? stateBadge(d.state) : (t.active ? '' : `<span class="badge t-grey">${bi('tpl.archived')}</span>`)}</div>
       <div class="muted small">${esc(t.template_code)} · ${freqText(t, d ? d.items : 0)}${d && d.period ? ' · ' + periodLabel(t.frequency, d.period.work_date, d.period.shift) : ''}${nOv ? ' · ' + bi('mac.own_std_n', { N: nOv }) : ''}${nOff ? ' · ' + bi('mac.off_n', { N: nOff }) : ''}</div>
+      ${missStd.get(a.assignment_id) ? `<div><span class="tag warn">${bi('mac.need_std_n', { N: missStd.get(a.assignment_id) })}</span></div>` : ''}
       <div class="row">
         ${d && d.period && t.active ? `<a class="btn small primary" href="#/check/${encodeURIComponent(a.assignment_id)}">${ICON.checklist}<span>${bi('mac.check_now')}</span></a>` : ''}
         ${c3 ? `<button type="button" class="btn small" data-ov="${esc(a.assignment_id)}"${dis}>${ICON.edit}<span>${bi('mac.own_std')}</span></button>

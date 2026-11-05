@@ -12,14 +12,19 @@ function isoPf_(vi, zh, stdVi, stdZh, req) {
   return { group_key: 'VISUAL', name_vi: vi, name_zh: zh, input_type: ISO_PF_, std_type: 'NONE', std_text_vi: stdVi || '', std_text_zh: stdZh || '', required: req !== false };
 }
 
-/** Hạng mục số: nhóm, tên, đơn vị, kiểu tiêu chuẩn (RANGE/MAX/MIN/NONE), giới hạn; o: {req, stdVi, stdZh, type: THREE_PHASE, imb} */
+/**
+ * Hạng mục số: nhóm, tên, đơn vị, kiểu tiêu chuẩn (RANGE/MAX/MIN/NONE), giới hạn;
+ * o: {req, stdVi, stdZh, type: THREE_PHASE, imb, wlo, whi (ngưỡng Cần chú ý), need (mỗi máy phải đặt số — "Chưa đặt tiêu chuẩn")}
+ */
 function isoNum_(group, vi, zh, unit, std, min, max, o) {
   o = o || {};
   var it = { group_key: group, name_vi: vi, name_zh: zh, input_type: o.type || 'NUMBER', unit: unit || '', std_type: std || 'NONE',
     std_min: min === undefined ? null : min, std_max: max === undefined ? null : max, required: o.req !== false,
+    warn_lo: o.wlo === undefined ? null : o.wlo, warn_hi: o.whi === undefined ? null : o.whi,
     std_text_vi: o.stdVi || (std === 'NONE' || !std ? 'Theo nhà sản xuất / tiêu chuẩn công ty' : ''),
     std_text_zh: o.stdZh || (std === 'NONE' || !std ? '按厂家/公司标准' : '') };
   if (o.type === 'THREE_PHASE') it.extra_json = { imb_max: o.imb || 10 };
+  if (o.need) it.extra_json = Object.assign(it.extra_json || {}, { need_std: true });
   return it;
 }
 
@@ -499,7 +504,7 @@ function presetSet_(set) {
   return set === 'DAILY' ? DAILY_TEMPLATES_ : ISO_TEMPLATES_;
 }
 
-/** Danh sách mẫu của một bộ cho app chọn: {key, set, form_code, name, frequency, items, template_id, exists} */
+/** Danh sách mẫu của một bộ cho app chọn: {key, set, form_code, name, frequency, items, template_id, exists, updatable} */
 function isoTemplateList_(set) {
   set = set === 'DAILY' ? 'DAILY' : 'ISO';
   var have = {};
@@ -507,8 +512,56 @@ function isoTemplateList_(set) {
   return presetSet_(set).map(function (t) {
     var id = isoUuid_(t.key), cur = have[id];
     return { key: t.key, set: set, form_code: t.form_code || '', name_vi: t.name_vi, name_zh: t.name_zh, frequency: t.frequency, items: t.items.length,
-      template_id: id, exists: !!cur, template_code: cur ? cur.template_code : '', active: cur ? cur.active !== false : null };
+      template_id: id, exists: !!cur, template_code: cur ? cur.template_code : '', active: cur ? cur.active !== false : null,
+      updatable: cur ? presetFill_(t, templateItems_(id, cur.revision)).length : 0 };
   });
+}
+
+var PRESET_STD_FIELDS_ = ['unit', 'std_type', 'std_min', 'std_max', 'std_nominal', 'std_tol_pct', 'warn_lo', 'warn_hi', 'extra_json'];
+
+/**
+ * Tiêu chuẩn đề xuất của bộ mẫu cần điền vào một mẫu đã tạo — chỉ chỗ còn trống, không đè số người dùng đã đặt:
+ * hạng mục số còn Không đặt → lấy tiêu chuẩn đề xuất (kể cả đơn vị); cùng kiểu và cùng giới hạn → thêm ngưỡng Cần chú ý còn trống;
+ * còn Không đặt mà bộ mẫu đánh dấu "mỗi máy phải đặt số" → thêm cờ need_std. Hạng mục khớp theo tên tiếng Việt và kiểu nhập.
+ * Trả [{idx, std}] (idx = vị trí trong curItems).
+ */
+function presetFill_(t, curItems) {
+  var used = {}, out = [];
+  curItems.forEach(function (ci, idx) {
+    var pi = -1;
+    for (var k = 0; k < t.items.length; k++) if (!used[k] && t.items[k].name_vi === ci.name_vi) { pi = k; break; }
+    if (pi < 0) return;
+    used[pi] = true;
+    var pre = t.items[pi];
+    if (pre.input_type !== ci.input_type || (ci.input_type !== 'NUMBER' && ci.input_type !== 'THREE_PHASE')) return;
+    var errs = [];
+    var ps = normStd_(pre, errs, '');
+    if (errs.length) return;
+    var cur = {};
+    PRESET_STD_FIELDS_.forEach(function (f) { cur[f] = ci[f] === undefined || ci[f] === '' ? null : ci[f]; });
+    cur.std_text_vi = ci.std_text_vi || ''; cur.std_text_zh = ci.std_text_zh || '';
+    var ex = cur.extra_json || {};
+    var next = null;
+    if (cur.std_type === 'NONE' || !cur.std_type) {
+      if (ps.std_type !== 'NONE') {
+        next = {};
+        PRESET_STD_FIELDS_.forEach(function (f) { next[f] = ps[f]; });
+        next.std_text_vi = pre.std_text_vi || ''; next.std_text_zh = pre.std_text_zh || '';
+      } else if (ps.extra_json && ps.extra_json.need_std && !ex.need_std) {
+        next = Object.assign({}, cur, { extra_json: Object.assign({}, ex, { need_std: true }) });
+      }
+    } else if (cur.std_type === ps.std_type && String(cur.unit || '') === String(ps.unit || '') &&
+      ['std_min', 'std_max', 'std_nominal', 'std_tol_pct'].every(function (f) { return numOrNull_(cur[f]) === numOrNull_(ps[f]); })) {
+      var addLo = numOrNull_(cur.warn_lo) === null && ps.warn_lo !== null, addHi = numOrNull_(cur.warn_hi) === null && ps.warn_hi !== null;
+      if (addLo || addHi) {
+        next = Object.assign({}, cur);
+        if (addLo) next.warn_lo = ps.warn_lo;
+        if (addHi) next.warn_hi = ps.warn_hi;
+      }
+    }
+    if (next) out.push({ idx: idx, std: next });
+  });
+  return out;
 }
 
 /** Sheet Templates đã có cột form_code (đã chạy migrateSchema sau khi dán mã mới) */
@@ -568,6 +621,50 @@ function templateIsoSeed_(ctx) {
         writes: writes, state: su, noReplay: true,
         result: { created: created, skipped: skipped },
         audit: { entity_type: 'TEMPLATE', entity_id: '', after_json: { iso_created: created.map(function (c) { return c.key + '=' + c.template_code; }), skipped: skipped } }
+      };
+    }
+  });
+}
+
+/**
+ * template.isoUpdate {keys: [...]} — Trưởng bộ phận/Quản trị, PIN. Điền tiêu chuẩn đề xuất mới của bộ mẫu vào các mẫu đã tạo
+ * (presetFill_: chỉ chỗ còn trống). Mẫu có thay đổi → phiên bản mới đủ các dòng, item_key giữ nguyên (gán máy, tiêu chuẩn riêng,
+ * lượt kiểm cũ không đổi); mẫu chưa tạo hoặc không có gì để điền thì bỏ qua.
+ */
+function templateIsoUpdate_(ctx) {
+  var p = ctx.req.payload || {};
+  var keys = Array.isArray(p.keys) ? p.keys.map(String) : [];
+  var defs = ISO_TEMPLATES_.concat(DAILY_TEMPLATES_).filter(function (t) { return keys.indexOf(t.key) >= 0; });
+  if (!defs.length) throw validationError_([fieldError_('keys', 'REQUIRED')]);
+  return executeWrite_(ctx, {
+    entity_type: 'TEMPLATE', entity_id: '',
+    build: function () {
+      var writes = [], updated = [], skipped = [];
+      defs.forEach(function (t) {
+        var id = isoUuid_(t.key);
+        var tpl = findOne_('Templates', 'template_id', id);
+        if (!tpl) { skipped.push(t.key); return; }
+        var items = templateItems_(id, tpl.revision);
+        var fills = presetFill_(t, items);
+        if (!fills.length) { skipped.push(t.key); return; }
+        var byIdx = {};
+        fills.forEach(function (f) { byIdx[f.idx] = f.std; });
+        var row = Object.assign({}, tpl, { revision: Number(tpl.revision || 1) + 1 });
+        delete row.__row;
+        cUpdate_(ctx, row);
+        writes.push({ sheet: 'Templates', mode: 'update', row: row });
+        items.forEach(function (ci, idx) {
+          var r = Object.assign({}, ci, byIdx[idx] || {}, { template_item_id: uuid_(), template_id: id, revision: row.revision });
+          delete r.__row;
+          writes.push({ sheet: 'TemplateItems', mode: 'insert', row: cNew_(ctx, r) });
+        });
+        updated.push({ key: t.key, template_id: id, template_code: tpl.template_code, revision: row.revision, items: fills.length });
+      });
+      if (!updated.length) throw validationError_([fieldError_('keys', 'ISO_NOTHING_TO_UPDATE')]);
+      return {
+        writes: writes, noReplay: true,
+        result: { updated: updated, skipped: skipped },
+        audit: { entity_type: 'TEMPLATE', entity_id: '', after_json: { preset_updated: updated.map(function (u) { return u.key + '=' + u.template_code + ' r' + u.revision + ' (' + u.items + ')'; }), skipped: skipped } }
       };
     }
   });
