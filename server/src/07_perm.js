@@ -11,6 +11,8 @@ var ACTION_TABLE_ = [
   'auth.login|0|public|R',
   'system.health|0|public|R',
   'system.getPublicState|0|public|R',
+  // App ISO lấy ngày có hồ sơ (không phiên, khóa bằng mã kết nối FEED_KEY_ISO, chỉ đọc)
+  'feed.isoEvidence|0|public|R',
   'auth.reauth|S|session|R',
   'auth.logout|S|session|R',
   'account.view|S|session|R',

@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.4 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026; d1.3 bộ mẫu hằng ngày 7 loại máy; d1.4 số tiêu chuẩn đề xuất)
+# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.5 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026; d1.3 bộ mẫu hằng ngày 7 loại máy; d1.4 số tiêu chuẩn đề xuất; d1.5 cửa đọc cho app ISO)
 
 Checksheet là app riêng, máy chủ riêng (dự án Apps Script riêng, bảng tính riêng), chỉ **đọc** danh sách thiết bị và khu vực từ M&E.
 Cách làm giống hệt M&E: dán `Code.gs` vào Apps Script, triển khai web app, mở trang app trên GitHub Pages.
@@ -216,9 +216,40 @@ là *Chỉ ghi số*).
    nguyên; mẫu lên phiên bản mới, máy đã gán và tiêu chuẩn riêng giữ nguyên; lượt kiểm cũ giữ tiêu chuẩn lúc kiểm.
 3. **Thiết bị** → từng phòng điện, chiller, bơm có chữ cam *N mục chưa đặt tiêu chuẩn* → **Tiêu chuẩn riêng** → đặt số.
 
+## Phần M — Bản 1.0.0-d1.5: cửa đọc `feed.isoEvidence` cho app ISO (ngày có hồ sơ)
+
+App ISO · 体系管理 (bản 2a) hỏi Checksheet mỗi giờ: **mã biểu nào có lượt kiểm vào ngày nào** để ô ✓ của biểu nơi làm Checksheet tự
+lên, không ai phải nộp lại. Làm đúng hợp đồng ở **Phần K** hướng dẫn của app ISO:
+
+- Cửa **chỉ đọc**, không cần đăng nhập, khóa bằng **mã kết nối riêng cho ISO** (`FEED_KEY_ISO`, khác mã kết nối M&E). Sai mã → app ISO báo
+  "App kia từ chối". Bảo trì thì cũng từ chối như mọi thao tác khác.
+- **Ngày có hồ sơ** = **ngày làm việc** của lượt kiểm (ca 3 qua nửa đêm tính vào ngày bắt đầu ca, như Bảng tháng) của mẫu có
+  **Mã biểu mẫu ISO** (`Templates.form_code`); **số lượt** = số lượt kiểm trong ngày của các mẫu mang mã đó. Mẫu đã ngừng vẫn tính lượt cũ;
+  lượt đã xóa không tính; mẫu không có mã biểu (vd bộ hằng ngày HN-01…07) không gửi.
+- Chỉ gửi **mã biểu, ngày, số lượt** của 400 ngày gần nhất — không gửi tên máy, người kiểm, kết quả, ảnh. App ISO **không ghi gì** sang
+  Checksheet.
+
+### Cập nhật (không cần migrateSchema)
+
+1. **THẬT** (`CS_MayChu_THAT`) rồi **THỬ** (`CS_MayChu_THU`): dán `Code.gs` mới → **Lưu** → **Triển khai → Quản lý các bản triển khai** →
+   bút chì → **Phiên bản mới** → Mô tả `d1.5 cua doc ISO` → **Triển khai**. Link `/exec` giữ nguyên.
+2. Vẫn trong trình soạn của `CS_MayChu_THAT`: chọn hàm **`adminCreateFeedKeyIso`** → **Chạy** → **Nhật ký thực thi** có dòng
+   "Mã kết nối cho app ISO: …" → chép mã (đủ ký tự, không dấu cách; **không gửi qua chat**). Chạy lại thì in lại đúng mã cũ.
+3. App Checksheet trên máy tính: **Tải lại bản mới** → **Tài khoản → Thông tin** ghi `1.0.0-d1.5`; **Tài khoản → Quản trị → Trạng thái hệ
+   thống** có dòng **Cửa đọc cho app ISO** = **ON**.
+4. App ISO (`/ISO/`) trên máy tính: **Tài khoản → Quản trị → Kết nối M&E / Checksheet** → thẻ **App Checksheet** → dán **Link /exec** của
+   `CS_MayChu_THAT` (link Checksheet đang dùng) và **Mã kết nối** vừa chép → **Thử kết nối** → khung xanh "Kết nối được: N dòng ngày, ghép
+   được M biểu" → **Lưu** → PIN. (Các bước bên ISO: mục "Nối M&E / Checksheet" trong hướng dẫn của app ISO.)
+5. Biểu nào bên ISO báo "chưa nhận ngày nào" hoặc "mã biểu không có trong danh mục ISO": sửa **Mã biểu mẫu** của mẫu bên Checksheet cho
+   khớp danh mục ISO (**Mẫu checksheet** → bấm mẫu → ô **Mã biểu mẫu ISO** → **Lưu**). Mã con được (`BM-CĐ-07-06-KT`): ISO tự gộp về mã cha.
+
+**Đổi mã** (lộ mã): Thuộc tính tập lệnh của `CS_MayChu_THAT` → xóa `FEED_KEY_ISO` → chạy lại `adminCreateFeedKeyIso` → dán mã mới ở app ISO
+(mã cũ hết dùng được ngay). **Ngắt hẳn**: xóa `FEED_KEY_ISO` (Trạng thái hệ thống về **OFF**).
+
 ## Lưu ý an toàn
 
 - **Mã kết nối M&E** giống mật khẩu: chỉ dán ở màn Kết nối M&E. Lộ mã: bên M&E xóa thuộc tính `FEED_KEY_CS` → chạy lại `adminCreateFeedKey` → nhập mã mới bên Checksheet.
+- **Mã kết nối cho app ISO** (`FEED_KEY_ISO`, d1.5) cũng giống mật khẩu: chỉ dán ở app ISO. Lộ mã: xóa `FEED_KEY_ISO` → chạy lại `adminCreateFeedKeyIso` → dán mã mới bên ISO (Phần M).
 - Không chia sẻ, không sửa tay hai bảng tính `CS_NghiepVu` / `CS_BaoMat` trong thư mục `CS_HeThong`.
 - **Owner quên PIN**: Thuộc tính tập lệnh thêm `OWNER_RESET_TEMP_PIN` = 6 số → chạy **`adminResetOwnerPin`** → đăng nhập bằng PIN tạm và đổi ngay.
 - **Sao lưu** tự động hằng tuần (Chủ nhật 1 giờ, giữ 8 bản trong `CS_Backups`); **Quản trị → Sao lưu → Sao lưu ngay** trước khi sửa lớn.

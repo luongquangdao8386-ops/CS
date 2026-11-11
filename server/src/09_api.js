@@ -12,6 +12,7 @@ var HANDLERS_ = {
   'session.revokeOwn': function (ctx) { return sessionRevokeOwn_(ctx); },
   'system.getPublicState': function (req) { return publicState_(req); },
   'system.health': function () { return { app_id: APP_ID }; },
+  'feed.isoEvidence': function (req) { return feedIsoEvidence_(req); },
   'sync.bootstrap': function (ctx) { return syncBootstrap_(ctx); },
   'sync.changes': function (ctx) { return syncChanges_(ctx); },
   'sync.push': function (ctx) { return syncPush_(ctx); },
@@ -53,8 +54,8 @@ var HANDLERS_ = {
   'sample.seed': function (ctx) { return sampleSeedAction_(ctx); }
 };
 
-/** Action không cần phiên */
-var PUBLIC_ACTIONS_ = { 'auth.login': 1, 'system.getPublicState': 1, 'system.health': 1 };
+/** Action không cần phiên (feed.isoEvidence: máy chủ app ISO gọi, khóa bằng mã kết nối FEED_KEY_ISO) */
+var PUBLIC_ACTIONS_ = { 'auth.login': 1, 'system.getPublicState': 1, 'system.health': 1, 'feed.isoEvidence': 1 };
 
 /** Action được chạy khi bảo trì */
 var MAINTENANCE_ALLOW_ = { 'system.health': 1, 'system.getPublicState': 1, 'auth.logout': 1 };
@@ -168,7 +169,8 @@ function dispatchInner_(req, viaPush) {
   if (!def) throw apiError_('FORBIDDEN');
   if (!HANDLERS_[req.action]) throw apiError_('FEATURE_NOT_ENABLED');
   if (req.action !== 'system.health' && req.action !== 'system.getPublicState') {
-    if (cmpVersion_(req.app_version, setting_('min_client_version')) < 0) throw apiError_('CLIENT_UPDATE_REQUIRED');
+    // feed.isoEvidence do máy chủ ISO gọi (app_version là phiên bản máy chủ ISO): không theo phiên bản app Checksheet tối thiểu
+    if (req.action !== 'feed.isoEvidence' && cmpVersion_(req.app_version, setting_('min_client_version')) < 0) throw apiError_('CLIENT_UPDATE_REQUIRED');
     if (!isUuidV4_(req.device_id)) throw validationError_([fieldError_('device_id', 'ID_INVALID')]);
   }
   if (sysProps_().maintenance_mode && !MAINTENANCE_ALLOW_[req.action]) throw apiError_('SYSTEM_MAINTENANCE');

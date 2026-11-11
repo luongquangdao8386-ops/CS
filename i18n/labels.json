@@ -635,6 +635,7 @@
   "audit_grp.report": ["Logo báo cáo", "报表标志"],
   "audit_grp.backup": ["Sao lưu", "备份"],
   "health.me_link": ["Kết nối M&E (lấy thiết bị mỗi giờ)", "M&E连接（每小时获取设备）"],
+  "health.iso_feed": ["Cửa đọc cho app ISO (ngày có hồ sơ)", "ISO应用读取接口（有记录的日期）"],
   "health.machines": ["Thiết bị đang dùng / tổng", "在用设备/总数"],
   "health.report_logo": ["Logo trên báo cáo", "报表标志"],
   "health.app_base_url": ["Địa chỉ app", "应用地址"],

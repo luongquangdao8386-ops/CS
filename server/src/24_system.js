@@ -202,6 +202,9 @@ function healthRows_() {
   add('me_link', me.linked && me.last_sync_status === 'OK' && lst && now_().getTime() - lst.getTime() < 3 * 3600000,
     me.linked ? (me.last_sync_status || '—') + (me.last_sync_at ? ' · ' + String(me.last_sync_at).slice(0, 16).replace('T', ' ') : '') : 'NOT_LINKED',
     me.linked ? (me.last_sync_error || '') : 'Tài khoản → Quản trị → Kết nối M&E');
+  // Cửa đọc cho app ISO: bật khi đã tạo mã kết nối (adminCreateFeedKeyIso)
+  var isoKey = String(prop_('FEED_KEY_ISO') || '').length >= ISO_FEED_MIN_KEY_;
+  add('iso_feed', true, isoKey ? 'ON' : 'OFF', isoKey ? '' : 'Chưa nối app ISO (chạy adminCreateFeedKeyIso khi cần)');
   var macs = readRows_('Machines');
   add('machines', macs.some(function (m) { return m.active; }), macs.filter(function (m) { return m.active; }).length + ' / ' + macs.length);
   var lb = stateGet_(st, 'last_backup_at', ''), lbs = stateGet_(st, 'last_backup_status', '');

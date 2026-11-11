@@ -7,10 +7,12 @@ Cùng bố cục, màu sắc và lõi đăng nhập/đồng bộ với app M&E. 
 Bản `1.0.0-d1.2` (30/10/2026, nhánh `claude/iso-templates`): bộ mẫu theo biểu ISO cơ điện BM-CĐ-xx + mã biểu mẫu trên PDF/Excel Bảng tháng — xem Phần J của HUONG_DAN_TRIEN_KHAI.md.
 Bản `1.0.0-d1.3` (05/11/2026, nhánh `claude/daily-templates`, phát hành THẬT 05/11/2026 — máy chủ THẬT/THỬ dán Code.gs theo Phần K): bộ mẫu hằng ngày 7 loại máy + bỏ mục "nếu có" theo từng máy — xem Phần K.
 Bản `1.0.0-d1.4` (05/11/2026, phát hành THẬT): số tiêu chuẩn đề xuất cho bộ mẫu hằng ngày (vượt là báo đỏ), mục phải đặt theo từng máy hiện "Chưa đặt tiêu chuẩn", nút *Cập nhật tiêu chuẩn đề xuất* cho mẫu đã tạo — xem Phần L.
+Bản `1.0.0-d1.5` (11/11/2026, nhánh `claude/optimistic-albattani-iyk8bs`, chưa phát hành THẬT): cửa chỉ-đọc `feed.isoEvidence` cho app ISO (ngày có hồ sơ theo mã biểu mẫu, khóa `FEED_KEY_ISO`, hàm `adminCreateFeedKeyIso`) — xem Phần M.
 
 ## App làm gì
 
 - **Thiết bị và khu vực lấy một chiều từ M&E** (cửa chỉ-đọc `feed.equipment` của M&E, mỗi giờ hoặc bấm *Cập nhật từ M&E*). Thiết bị chỉ sửa ở M&E. Tem QR M&E đang dán trên máy quét được luôn trong Checksheet.
+- **App ISO đọc ngày có hồ sơ** (d1.5): cửa chỉ-đọc `feed.isoEvidence` trả mã biểu · ngày làm việc · số lượt kiểm của các mẫu có *Mã biểu mẫu* (400 ngày gần nhất), khóa bằng mã kết nối riêng `FEED_KEY_ISO`. Không gửi tên máy, người, kết quả, ảnh; ISO không ghi gì sang Checksheet.
 - **Mẫu checksheet** có phiên bản: tần suất mỗi ca / ngày / tuần / tháng; hạng mục lấy từ thư viện (~34 hạng mục có sẵn: nhiệt độ, áp suất, điện áp, dòng 3 pha, độ rung, mức dầu, rò rỉ…) hoặc tự thêm. Kiểu tiêu chuẩn: khoảng, tối đa, tối thiểu, định mức ± %, không có; ngưỡng *Cần chú ý*; dòng 3 pha tự tính lệch pha. Tiêu chuẩn riêng cho từng máy.
 - **Bộ mẫu theo biểu ISO** (d1.2): nút *Tạo bộ mẫu theo biểu ISO* tạo sẵn 23 mẫu từ bộ biểu kiểm tra BM-CĐ-xx của công ty (chưa gán máy, không tạo trùng); mỗi mẫu có **mã biểu mẫu** in trên PDF/Excel Bảng tháng.
 - **Bộ mẫu hằng ngày** (d1.3): nút *Tạo bộ mẫu hằng ngày* tạo sẵn 7 mẫu kiểm mỗi ngày (máy phát điện, phòng điện, máy nén khí, máy sấy lạnh, máy sấy hấp thụ, chiller, bơm chiller; mã HN-01…07, không tạo trùng). Mục "nếu có" máy không có thì bỏ ở *Tiêu chuẩn riêng* của máy (**Máy này không có**).
