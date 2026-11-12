@@ -48,7 +48,7 @@ test('họ khóa ghép động đủ thành viên', () => {
     'user_status.': ['ACTIVE', 'DISABLED', 'MUST_CHANGE_PIN'],
     'backup_status.': ['VERIFIED', 'INCONSISTENT', 'FAILED', 'RUNNING'],
     'mac.only_': ['assigned', 'unassigned', 'all', 'inactive'],
-    'audit_grp.': ['check', 'abnormal', 'missed', 'day', 'template', 'library', 'assignment', 'machine', 'user', 'settings', 'me', 'report', 'backup'],
+    'audit_grp.': ['check', 'abnormal', 'missed', 'day', 'template', 'library', 'assignment', 'machine', 'user', 'settings', 'me', 'report', 'bg', 'backup'],
     'action.': ['check.submit', 'doc.upload']
   };
   // Dòng kiểm tra sức khỏe máy chủ (24_system.js add('khóa', …))

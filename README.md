@@ -7,6 +7,7 @@ Cùng bố cục, màu sắc và lõi đăng nhập/đồng bộ với app M&E. 
 Bản `1.0.0-d1.2` (30/10/2026, nhánh `claude/iso-templates`): bộ mẫu theo biểu ISO cơ điện BM-CĐ-xx + mã biểu mẫu trên PDF/Excel Bảng tháng — xem Phần J của HUONG_DAN_TRIEN_KHAI.md.
 Bản `1.0.0-d1.3` (05/11/2026, nhánh `claude/daily-templates`, phát hành THẬT 05/11/2026 — máy chủ THẬT/THỬ dán Code.gs theo Phần K): bộ mẫu hằng ngày 7 loại máy + bỏ mục "nếu có" theo từng máy — xem Phần K.
 Bản `1.0.0-d1.4` (05/11/2026, phát hành THẬT): số tiêu chuẩn đề xuất cho bộ mẫu hằng ngày (vượt là báo đỏ), mục phải đặt theo từng máy hiện "Chưa đặt tiêu chuẩn", nút *Cập nhật tiêu chuẩn đề xuất* cho mẫu đã tạo — xem Phần L.
+Bản `1.0.0-d1.5` (12/11/2026, nhánh `claude/nice-fermi-5xso4c`, chưa phát hành): **Ảnh nền** màn đăng nhập (cả màn chờ lúc mở app) và trang chủ — Quản trị tự thay trong app, nút *Dùng ảnh mặc định* (chép cách làm từ app ISO 1.0.0-d3.3) — xem Phần M.
 
 ## App làm gì
 
@@ -16,6 +17,7 @@ Bản `1.0.0-d1.4` (05/11/2026, phát hành THẬT): số tiêu chuẩn đề xu
 - **Bộ mẫu hằng ngày** (d1.3): nút *Tạo bộ mẫu hằng ngày* tạo sẵn 7 mẫu kiểm mỗi ngày (máy phát điện, phòng điện, máy nén khí, máy sấy lạnh, máy sấy hấp thụ, chiller, bơm chiller; mã HN-01…07, không tạo trùng). Mục "nếu có" máy không có thì bỏ ở *Tiêu chuẩn riêng* của máy (**Máy này không có**).
 - **Màn kiểm**: tiêu chuẩn hiện ngay cạnh ô nhập, gõ tới đâu tô màu tới đó (Đạt / Cần chú ý / Không đạt), Không đạt bắt buộc ghi chú, chụp ảnh. Mất mạng vẫn lưu trên máy, có mạng tự gửi. Máy chủ đánh giá lại khi lưu và lưu kèm tiêu chuẩn lúc kiểm.
 - **Trưởng bộ phận**: mục Không đạt chờ xử lý, máy bỏ sót kỳ kiểm (ghi lý do), xác nhận ngày (khóa sửa). Mỗi người chỉ thấy khu vực mình phụ trách.
+- **Ảnh nền** (d1.5): Quản trị (cấp 4, PIN) thay ảnh nền màn đăng nhập (cả màn chờ lúc mở app) và trang chủ ở *Tài khoản → Quản trị → Ảnh nền đăng nhập, trang chủ*, hoặc bấm *Dùng ảnh mặc định*. Ảnh lưu riêng tư trên Drive của máy chủ Checksheet (không vào repo); mỗi máy giữ ảnh trong bộ nhớ của trang (tiền tố `cs` / `cs_thu`) nên màn đăng nhập hiện ảnh mới ngay cả khi chưa đăng nhập, không chớp ảnh cũ.
 - **Bảng tháng** (lịch trên iPhone, bảng như phiếu giấy + biểu đồ xu hướng trên web) và **báo cáo** mỗi máy mỗi tháng: PDF (máy chủ dựng, logo công ty ở đầu trang) và Excel (có logo).
 
 ## Cấu trúc

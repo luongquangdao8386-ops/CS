@@ -303,7 +303,7 @@ export async function renderBackup(view, { shell }) {
 /* ====================== Nhật ký thao tác ====================== */
 
 const auditFilt = { action: '', from: '', to: '' };
-const AUDIT_ACTIONS = ['check.', 'abnormal.', 'missed.', 'day.', 'template.', 'library.', 'assignment.', 'machine.', 'user.', 'settings.', 'me.', 'report.', 'backup.'];
+const AUDIT_ACTIONS = ['check.', 'abnormal.', 'missed.', 'day.', 'template.', 'library.', 'assignment.', 'machine.', 'user.', 'settings.', 'me.', 'report.', 'bg.', 'backup.'];
 
 function jsonLines(o) {
   if (!o || typeof o !== 'object') return '';
@@ -323,7 +323,7 @@ export async function renderAudit(view, { shell }) {
   const macs = new Map((await recs('MACHINE')).map((m) => [m.machine_id, m.machine_code]));
   const tpls = new Map((await recs('TEMPLATE')).map((t) => [t.template_id, t.template_code]));
   const ent = (a) => esc(macs.get(a.entity_id) || tpls.get(a.entity_id) || (a.entity_id ? a.entity_type : ''));
-  const acts = AUDIT_ACTIONS.filter((x) => roleLevel() >= 4 || !['user.', 'settings.', 'me.', 'backup.'].includes(x));
+  const acts = AUDIT_ACTIONS.filter((x) => roleLevel() >= 4 || !['user.', 'settings.', 'me.', 'backup.', 'bg.'].includes(x));
   view.innerHTML = `<div class="filters"><div class="row">
       <select class="sel inp" id="a-act"><option value="">${esc(biText('adm.audit.all'))}</option>${acts.map((x) => `<option value="${x}"${auditFilt.action === x ? ' selected' : ''}>${esc(biText('audit_grp.' + x.replace('.', '')))}</option>`).join('')}</select>
       </div><div class="form-grid">${dateInput('a_from', 'adm.audit.from', auditFilt.from)}${dateInput('a_to', 'adm.audit.to', auditFilt.to)}</div>

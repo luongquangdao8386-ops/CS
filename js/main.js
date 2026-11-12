@@ -7,8 +7,11 @@ import { renderLogin, renderChangePin, renderUnlock, renderBoot, toast, dialog, 
 import { app, enterApp, syncNow } from './app.js';
 import { stopRouter } from './router.js';
 import { invalidate } from './data.js';
+import { applyBg } from './bg.js';
 
 const root = document.getElementById('app');
+// Ảnh nền riêng đã giữ trên máy (Quản trị → Ảnh nền): js/early.js đã gắn lớp, đây gắn ảnh từ Cache Storage
+applyBg().catch(() => {});
 applyEnvTitle(ls.get('env'));
 
 // Ghi lại vi phạm CSP (test kiểm không có)

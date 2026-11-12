@@ -45,6 +45,8 @@ var ACTION_TABLE_ = [
   'report.pdf|1|net|R',
   'report.logo.get|1|net|R',
   'report.logo.set|4|pin|W',
+  'bg.get|1|net|R',
+  'bg.set|4|pin|W',
   // Người dùng, quản trị
   'user.pickList|3|net|R',
   'user.view|4|net|R',

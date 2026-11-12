@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.4 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026; d1.3 bộ mẫu hằng ngày 7 loại máy; d1.4 số tiêu chuẩn đề xuất)
+# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.5 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026; d1.3 bộ mẫu hằng ngày 7 loại máy; d1.4 số tiêu chuẩn đề xuất; d1.5 ảnh nền đăng nhập, trang chủ)
 
 Checksheet là app riêng, máy chủ riêng (dự án Apps Script riêng, bảng tính riêng), chỉ **đọc** danh sách thiết bị và khu vực từ M&E.
 Cách làm giống hệt M&E: dán `Code.gs` vào Apps Script, triển khai web app, mở trang app trên GitHub Pages.
@@ -215,6 +215,29 @@ là *Chỉ ghi số*).
    bấm **Cập nhật tiêu chuẩn đề xuất (… mẫu)** → PIN. Chỉ điền mục còn *Không đặt* và ngưỡng Cần chú ý còn trống — số anh/chị đã sửa giữ
    nguyên; mẫu lên phiên bản mới, máy đã gán và tiêu chuẩn riêng giữ nguyên; lượt kiểm cũ giữ tiêu chuẩn lúc kiểm.
 3. **Thiết bị** → từng phòng điện, chiller, bơm có chữ cam *N mục chưa đặt tiêu chuẩn* → **Tiêu chuẩn riêng** → đặt số.
+
+## Phần M — Bản 1.0.0-d1.5: ảnh nền màn đăng nhập, trang chủ (Quản trị tự thay)
+
+Giống app ISO 1.0.0-d3.3. Quản trị (cấp 4) thay ảnh ở đầu **màn đăng nhập** (cả màn chờ lúc mở app) và **trang chủ** cho mọi người dùng.
+Ảnh lưu **riêng tư** trong thư mục dữ liệu của máy chủ Checksheet trên Drive (`CS_HeThong`), không đưa lên repo/trang công khai. Ảnh cũ
+vào thùng rác Drive khi thay. Mỗi điện thoại/máy tính giữ ảnh trong bộ nhớ của trang (tiền tố `cs` ở `/CS/`, `cs_thu` ở `/CS-thu/`,
+không đụng bộ nhớ của ISO hay M&E), nên màn đăng nhập hiện ảnh mới cả khi chưa đăng nhập, không thoáng hiện ảnh cũ.
+
+### Cập nhật máy chủ
+
+1. **THỬ** (`CS_MayChu_THU`) trước, rồi **THẬT** (`CS_MayChu_THAT`): **Sao lưu ngay** → dán `Code.gs` mới → **Lưu** → chạy
+   **`migrateSchema`** (thêm 4 dòng cài đặt `bg_*` vào sheet Settings; nhật ký ghi "Thêm: không có" là đúng) → **Triển khai → Quản lý
+   các bản triển khai** → bút chì → **Phiên bản mới** → **Triển khai**. (Quên chạy `migrateSchema` vẫn thay ảnh được — dòng cài đặt tự tạo.)
+2. Sau khi cả hai máy chủ đã lên d1.5 mới đẩy app (`main`); app báo *"Máy chủ chưa lên bản có Ảnh nền"* nếu máy chủ còn bản cũ.
+
+### Thay ảnh
+
+1. App: **Tải lại bản mới** → **Tài khoản → Quản trị → Ảnh nền đăng nhập, trang chủ**.
+2. Ở khối **Màn đăng nhập** hoặc **Trang chủ** → **Chọn ảnh** (ảnh chụp iPhone dùng được ngay, app tự thu nhỏ còn khoảng 1600 px) →
+   xem trước khung iPhone → **Dùng ảnh này** → nhập PIN. Nên dùng ảnh ngang, chủ thể ở giữa.
+3. Quay lại ảnh của app: **Dùng ảnh mặc định** → xác nhận → PIN.
+4. Máy khác nhận ảnh mới ở lần đồng bộ kế tiếp (mở app có mạng). Màn đăng nhập của một máy chỉ đổi khi máy đó đã đăng nhập ít nhất một lần.
+5. **Trạng thái hệ thống** có dòng *Ảnh nền đăng nhập, trang chủ* (ảnh riêng / ảnh mặc định); **Nhật ký thao tác** → nhóm *Ảnh nền*.
 
 ## Lưu ý an toàn
 

@@ -1313,3 +1313,15 @@ a.day { display: block; text-decoration: none; color: inherit; }
 .asg-card.saving { opacity: 0.75; border-style: dashed; }
 .badge .spinner.tiny { display: inline-block; vertical-align: -2px; border-color: rgba(23,50,79,0.25); border-top-color: var(--navy); }
 #toast .spinner.tiny { display: inline-block; vertical-align: -2px; border-color: rgba(255,255,255,0.35); border-top-color: #fff; }
+
+/* Ảnh nền riêng (Quản trị → Ảnh nền): js/early.js gắn lớp bg-login / bg-home trước khi vẽ, js/bg.js đặt biến --bg-login / --bg-home
+   (URL blob của ảnh giữ trên máy). Biến chưa có (đang nạp) → không có ảnh, chỉ màu nền — không chớp ảnh mặc định. */
+html.bg-login .boot-photo, html.bg-login .login-hero { background-image: var(--bg-login); background-color: #DCE3EA; }
+html.bg-home .home-hero, html.bg-home .cs-hero { background-image: var(--bg-home); background-color: #DCE3EA; }
+.bg-card .card-head { align-items: center; }
+.bg-prev { position: relative; width: 100%; max-width: 390px; border-radius: 12px; overflow: hidden; margin: 8px 0 12px; border: 1px solid var(--line);
+  background-color: #DCE3EA; background-repeat: no-repeat; background-size: cover; padding: 12px; }
+.bg-prev.login { aspect-ratio: 13 / 10; background-position: center 40%; }
+.bg-prev.home { aspect-ratio: 16 / 9.3; background-position: center 45%; }
+.bg-prev .brand { transform: scale(0.85); transform-origin: left top; }
+.modal .bg-prev { max-width: 100%; }

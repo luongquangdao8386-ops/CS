@@ -26,7 +26,7 @@ function auditOwn_(ctx) {
   return { items: logs, operations: ops };
 }
 
-var ADMIN_ACTION_PREFIX_ = ['user.', 'auth.', 'session.', 'pin.', 'settings.', 'system.', 'backup.', 'me.', 'report.logo', 'sample.'];
+var ADMIN_ACTION_PREFIX_ = ['user.', 'auth.', 'session.', 'pin.', 'settings.', 'system.', 'backup.', 'me.', 'report.logo', 'sample.', 'bg.set'];
 
 /** audit.view {entity_id?, user_id?, action?, from?, to?, limit?}: Trưởng bộ phận, Quản trị (Trưởng bộ phận không xem thao tác quản trị) */
 function auditView_(ctx) {
@@ -55,8 +55,8 @@ function auditView_(ctx) {
 
 /* ---------------- Cấu hình ---------------- */
 
-/** Khóa không sửa trong màn Cấu hình (logo sửa ở màn riêng) */
-var SETTINGS_READONLY_ = { report_logo_file_id: 1, report_logo_rev: 1 };
+/** Khóa không sửa trong màn Cấu hình (logo, ảnh nền sửa ở màn riêng) */
+var SETTINGS_READONLY_ = { report_logo_file_id: 1, report_logo_rev: 1, bg_login_file_id: 1, bg_login_rev: 1, bg_home_file_id: 1, bg_home_rev: 1 };
 var SETTINGS_BOUNDS_ = {
   session_days: [1, 90], session_warn_days: [0, 30], change_pin_session_minutes: [5, 60], reauth_window_minutes: [1, 30], temp_pin_hours: [1, 168],
   max_sessions_per_user: [1, 50], login_fail_limit: [3, 20], login_fail_window_minutes: [1, 120], login_lock_minutes: [1, 1440],
@@ -214,6 +214,7 @@ function healthRows_() {
   var base = String(setting_('app_base_url') || '');
   add('app_base_url', !!base, base, base ? '' : 'Chưa điền app_base_url');
   add('report_logo', true, setting_('report_logo_rev') ? 'ON' : 'OFF');
+  add('bg', true, 'Đăng nhập: ' + (setting_('bg_login_rev') ? 'ảnh riêng' : 'ảnh mặc định') + ' · Trang chủ: ' + (setting_('bg_home_rev') ? 'ảnh riêng' : 'ảnh mặc định'));
   var cells = 0;
   [prop_('BUSINESS_SPREADSHEET_ID'), prop_('SECURITY_SPREADSHEET_ID')].forEach(function (id) {
     if (!id) return;
