@@ -1,6 +1,6 @@
 // Mẫu checksheet (Trưởng bộ phận, Quản trị): danh sách, sửa mẫu (tần suất, ca, hạng mục từ thư viện, tiêu chuẩn), gán cho
-// nhiều máy, ngừng dùng; thư viện hạng mục. Sửa hạng mục = phiên bản mới; lượt kiểm cũ giữ tiêu chuẩn lúc kiểm.
-import { bi, biText, esc, uuid, nameText, biName, api, resMsg } from '../core.js';
+// nhiều máy, ngừng dùng, xóa hẳn; thư viện hạng mục. Sửa hạng mục = phiên bản mới; lượt kiểm cũ giữ tiêu chuẩn lúc kiểm.
+import { bi, biText, esc, uuid, nameText, biName, api, resMsg, badge, fmtDate, fmtDateTime, fmtNumber } from '../core.js';
 import { ICON, dialog, toast, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, roleLevel, shifts, templateItems, inMyAreas } from '../data.js';
@@ -47,7 +47,8 @@ export async function renderTemplates(view, { shell }) {
       <a class="btn small" href="#/templates/library">${ICON.library}<span>${bi('tpl.library')}</span></a>
       <button type="button" class="btn small" id="tp-iso"${online ? '' : ' disabled'}>${ICON.plus}<span>${bi('tpl.iso_btn')}</span></button>
       <button type="button" class="btn small" id="tp-daily"${online ? '' : ' disabled'}>${ICON.plus}<span>${bi('tpl.daily_btn')}</span></button>
-      ${archivedN ? `<button type="button" class="btn small" id="tp-arch">${bi(showArchived ? 'tpl.hide_archived' : 'tpl.show_archived', { N: archivedN })}</button>` : ''}</div></div>
+      ${archivedN ? `<button type="button" class="btn small" id="tp-arch">${bi(showArchived ? 'tpl.hide_archived' : 'tpl.show_archived', { N: archivedN })}</button>` : ''}
+      ${all.length ? `<button type="button" class="btn small danger" id="tp-purge"${online ? '' : ' disabled'}>${ICON.trash}<span>${bi('tpl.purge_many')}</span></button>` : ''}</div></div>
     ${online ? '' : `<p class="banner warn">${bi('sync.need_network')}</p>`}
     <p class="muted small">${bi('tpl.list_hint')}</p>
     ${tpls.length ? (isWide() ? `<div class="table-wrap"><table class="tbl clickable"><thead><tr><th>${bi('tpl.code')}</th><th>${bi('tpl.name')}</th><th>${bi('tpl.frequency')}</th><th>${bi('tpl.items')}</th><th>${bi('tpl.machines')}</th><th>${bi('tpl.revision')}</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="cards">${rows}</div>`)
@@ -57,6 +58,11 @@ export async function renderTemplates(view, { shell }) {
   if (ab) ab.addEventListener('click', () => { showArchived = !showArchived; renderTemplates(view, { shell }); });
   $('#tp-iso', view).addEventListener('click', async (ev) => { if (await isoDialog(ev.currentTarget, 'ISO')) renderTemplates(view, { shell }); });
   $('#tp-daily', view).addEventListener('click', async (ev) => { if (await isoDialog(ev.currentTarget, 'DAILY')) renderTemplates(view, { shell }); });
+  const pg = $('#tp-purge', view);
+  if (pg) pg.addEventListener('click', async () => {
+    const ids = await pickPurge(all);
+    if (ids && ids.length && await purgeFlow(ids, pg)) renderTemplates(view, { shell });
+  });
 }
 
 /** Chữ của hai bộ mẫu soạn sẵn */
@@ -175,7 +181,8 @@ export async function renderTemplateForm(view, { shell, params }) {
     ${isNew ? '' : `<section class="card"><h2>${bi('tpl.assigned')}</h2>
       ${asg.length ? `<div class="chips">${asg.map((a) => { const m = macs.get(a.machine_id); return m ? `<a class="chip" href="#/m/${encodeURIComponent(m.machine_id)}">${esc(m.machine_code)}</a>` : ''; }).join('')}</div>` : `<p class="muted">${bi('tpl.assigned_none')}</p>`}
       <div class="row"><button type="button" class="btn small primary" id="tp-assign"${online && tpl.active ? '' : ' disabled'}>${ICON.plus}<span>${bi('tpl.assign')}</span></button>
-        <button type="button" class="btn small${tpl.active ? ' danger' : ''}" id="tp-archive"${online ? '' : ' disabled'}>${ICON.archive}<span>${bi(tpl.active ? 'tpl.archive' : 'tpl.unarchive')}</span></button></div>
+        <button type="button" class="btn small${tpl.active ? ' danger' : ''}" id="tp-archive"${online ? '' : ' disabled'}>${ICON.archive}<span>${bi(tpl.active ? 'tpl.archive' : 'tpl.unarchive')}</span></button>
+        <button type="button" class="btn small danger" id="tp-purge"${online ? '' : ' disabled'}>${ICON.trash}<span>${bi('tpl.purge')}</span></button></div>
       <p class="muted small">${bi('tpl.archive_hint')}</p></section>`}
   </div>`;
   wireForm(view);
@@ -250,6 +257,95 @@ export async function renderTemplateForm(view, { shell, params }) {
     if (res.ok) { toast(bi('form.saved'), 'ok'); await afterCommit(); renderTemplateForm(view, { shell, params }); return; }
     writeFail(res);
   });
+  const pg = $('#tp-purge', view);
+  if (pg) pg.addEventListener('click', async () => { if (await purgeFlow([tpl.template_id], pg)) navigate('/templates', { replace: true }); });
+}
+
+/* ---------------- Xóa hẳn mẫu ---------------- */
+
+/** "XÓA", "xoa", "Xóa"… đều được (cùng quy tắc với purgeConfirmOk_ của máy chủ) */
+const confirmOk = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'D').trim().toUpperCase() === 'XOA';
+
+/** Chọn các mẫu để xóa hẳn (mọi mẫu, kể cả đã ngừng); trả danh sách template_id */
+async function pickPurge(all) {
+  const list = all.slice().sort((a, b) => String(a.template_code).localeCompare(String(b.template_code)));
+  return dialog({
+    title: bi('tpl.purge'),
+    wide: true,
+    body: `<p class="muted small">${bi('tpl.purge_pick_hint')}</p>
+      <input class="inp" id="pg-q" placeholder="${esc(biText('tpl.purge_search'))}" autocomplete="off">
+      <div class="lib-list" id="pg-list">${list.map((t) => `<label class="check lib-pick" data-q="${esc((t.template_code + ' ' + (t.form_code || '') + ' ' + nameText(t)).toLowerCase())}"><input type="checkbox" value="${esc(t.template_id)}">
+        <span><span class="code">${esc(t.template_code)}</span> ${esc(nameText(t))}${t.form_code ? ` <span class="muted small">· ${esc(t.form_code)}</span>` : ''}${t.active ? '' : ` <span class="badge t-grey">${bi('tpl.archived')}</span>`}</span></label>`).join('')}</div>`,
+    actions: [{ label: bi('btn.cancel'), value: null }, { label: bi('tpl.purge_next'), kind: 'danger', read: (w) => $$('#pg-list input:checked', w).map((i) => i.value) }],
+    onOpen: (w) => {
+      const q = $('#pg-q', w);
+      q.addEventListener('input', () => { const t = q.value.trim().toLowerCase(); $$('[data-q]', w).forEach((l) => { l.hidden = !!t && !l.dataset.q.includes(t); }); });
+    }
+  });
+}
+
+/**
+ * Xóa hẳn mẫu: máy chủ đếm trước những gì sẽ bị xóa → xác nhận → PIN. Mẫu chưa có lượt kiểm: Trưởng bộ phận / Quản trị.
+ * Mẫu đã có lượt kiểm: chỉ owner; báo số lượt kiểm / bất thường / lý do bỏ sót / ảnh sẽ bị xóa theo, khuyên sao lưu trước,
+ * phải gõ chữ XÓA. Có người vừa kiểm thêm (số đếm đổi) → xem lại. Xóa xong máy này và mọi điện thoại tự tải lại dữ liệu.
+ */
+async function purgeFlow(ids, btn) {
+  for (let round = 0; round < 3; round++) {
+    busy(btn, true);
+    const r = await api('template.purgeInfo', { template_ids: ids }, { retry: true });
+    busy(btn, false);
+    if (!r.ok) { toast(esc(resMsg(r)), 'err'); return false; }
+    const d = r.data;
+    const list = d.templates || [];
+    const hist = list.filter((t) => t.has_history);
+    const blocked = hist.length > 0 && !d.is_owner;
+    const sum = (k) => fmtNumber(list.reduce((n, t) => n + (Number(t[k]) || 0), 0));
+    const row = (t) => `<div class="card rec-card purge-row${t.has_history ? ' purge-hist' : ''}">
+        <div class="rec-top"><span class="code">${esc(t.template_code)}${t.form_code ? ` <span class="muted small">· ${esc(t.form_code)}</span>` : ''}</span>
+          ${t.has_history && !d.is_owner ? `<span class="tag warn">${bi('tpl.purge_need_owner')}</span>` : ''}${t.active ? '' : `<span class="badge t-grey">${bi('tpl.archived')}</span>`}</div>
+        <div class="rec-name">${biName(t)}</div>
+        <div class="muted small">${bi('tpl.purge_counts', { I: t.items, G: t.assignments, R: t.runs, A: t.abnormals, M: t.missed, P: t.documents })}</div>
+        ${t.first_date ? `<div class="muted small">${bi('tpl.purge_span', { F: fmtDate(t.first_date), T: fmtDate(t.last_date) })}${t.abnormals_open ? ` · ${bi('tpl.purge_open', { N: t.abnormals_open })}` : ''}</div>` : ''}</div>`;
+    const backup = hist.length && !blocked ? `<div class="purge-backup">
+        <p>${d.last_backup_at ? `${bi('tpl.purge_backup_last', { T: fmtDateTime(d.last_backup_at) })} ${badge('backup_status.' + (d.last_backup_status || 'FAILED'))}` : bi('tpl.purge_backup_none')}</p>
+        <p class="muted small">${bi('tpl.purge_backup_hint')}</p></div>
+      <div class="fld"><label for="pg-confirm">${bi('tpl.purge_type')}</label><input class="inp" id="pg-confirm" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XÓA"></div>` : '';
+    const v = await dialog({
+      title: bi('tpl.purge'),
+      wide: true,
+      body: `${blocked ? `<p class="banner err">${bi('tpl.purge_owner_only')}</p>`
+          : hist.length ? `<p class="banner err">${bi('tpl.purge_hist', { R: sum('runs'), A: sum('abnormals'), M: sum('missed'), P: sum('documents') })}</p>`
+            : `<p class="banner warn">${bi('tpl.purge_plain', { N: list.length })}</p>`}
+        <div class="cards purge-list">${list.map(row).join('')}</div>${backup}`,
+      actions: [{ label: bi('btn.cancel'), value: null }]
+        .concat(hist.length && !blocked && roleLevel() >= 4 ? [{ label: bi('tpl.purge_backup_open'), value: { backup: true } }] : [])
+        .concat(blocked ? [] : [{ label: bi('tpl.purge_do', { N: list.length }), kind: 'danger', read: (w) => ({ confirm: ($('#pg-confirm', w) || {}).value || '' }) }]),
+      onOpen: (w) => {
+        const inp = $('#pg-confirm', w);
+        if (!inp) return;
+        const go = $$('.modal-actions .btn', w).pop();
+        const upd = () => { go.disabled = !confirmOk(inp.value); };
+        inp.addEventListener('input', upd);
+        upd();
+      }
+    });
+    if (!v) return false;
+    if (v.backup) { navigate('/admin/backup'); return false; }
+    const expect = Object.fromEntries(list.map((t) => [t.template_id, { runs: t.runs, abnormals: t.abnormals, missed: t.missed, documents: t.documents }]));
+    busy(btn, true);
+    toast(`<span class="spinner tiny"></span> ${bi('tpl.purging', { N: list.length })}`);
+    const res = await writeWithPin('template.purge', { template_ids: ids, confirm_text: v.confirm, expect });
+    busy(btn, false);
+    if (res.ok) {
+      toast(bi('tpl.purged', { N: res.data && res.data.purged ? res.data.purged.length : list.length }), 'ok');
+      await afterCommit();
+      return true;
+    }
+    if (res.code === 'VALIDATION_ERROR' && (res.errors || []).some((e) => e.code === 'PURGE_COUNTS_CHANGED')) { toast(bi('tpl.purge_changed'), 'err'); continue; }
+    writeFail(res);
+    return false;
+  }
+  return false;
 }
 
 /** Lỗi theo trường của máy chủ: "items.3.std_max" → ô của hạng mục 3 */

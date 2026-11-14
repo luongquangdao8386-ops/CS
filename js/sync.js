@@ -84,17 +84,19 @@ export function takeWriteChanges(cursor) {
  */
 export async function pullChanges({ first = null, onPage } = {}) {
   let cursor = await getMeta('cursor');
-  if (cursor === null || cursor === undefined) return bootstrap({ onPage });
+  // Tải lại toàn bộ: báo `applied` để màn xem đang mở vẽ lại (vd mẫu vừa bị xóa hẳn biến mất khỏi Hôm nay)
+  const reload = async () => { const b = await bootstrap({ onPage }); return b.ok ? { ...b, applied: 1, reloaded: true } : b; };
+  if (cursor === null || cursor === undefined) return reload();
   const boot = await getMeta('bootstrap');
   let applied = 0;
   for (let guard = 0; guard < 20; guard++) {
     const r = guard === 0 && first && first.ok ? first : await api('sync.changes', { cursor, limit: 500 }, { retry: true });
     if (!r.ok) return r;
-    if (boot && boot.permissions && r.data.perm_version !== boot.permissions.perm_version) return bootstrap({ onPage });
+    if (boot && boot.permissions && r.data.perm_version !== boot.permissions.perm_version) return reload();
     // Máy chủ lên phiên bản mới: tải lại quyền và cài đặt (action mới có trong danh sách quyền)
-    if (boot && r.data.server_version && boot.server_version && r.data.server_version !== boot.server_version) return bootstrap({ onPage });
-    // Quản trị đổi cấu hình (giờ ca…): tải lại cài đặt
-    if (boot && r.data.settings_rev !== undefined && Number(r.data.settings_rev) !== Number(boot.settings_rev || 0)) return bootstrap({ onPage });
+    if (boot && r.data.server_version && boot.server_version && r.data.server_version !== boot.server_version) return reload();
+    // Quản trị đổi cấu hình (giờ ca…) hoặc xóa hẳn mẫu: tải lại toàn bộ (mẫu, gán máy, lượt kiểm đã xóa không còn trên máy)
+    if (boot && r.data.settings_rev !== undefined && Number(r.data.settings_rev) !== Number(boot.settings_rev || 0)) return reload();
     if (r.data.users) await setMeta('users', r.data.users);
     const byType = {};
     for (const ch of r.data.changes) (byType[ch.entity_type] = byType[ch.entity_type] || []).push(ch);

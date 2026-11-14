@@ -1313,3 +1313,9 @@ a.day { display: block; text-decoration: none; color: inherit; }
 .asg-card.saving { opacity: 0.75; border-style: dashed; }
 .badge .spinner.tiny { display: inline-block; vertical-align: -2px; border-color: rgba(23,50,79,0.25); border-top-color: var(--navy); }
 #toast .spinner.tiny { display: inline-block; vertical-align: -2px; border-color: rgba(255,255,255,0.35); border-top-color: #fff; }
+
+/* Xóa hẳn mẫu (d1.5) */
+.purge-list { margin-top: 10px; }
+.purge-row.purge-hist { border-left: 3px solid var(--red); }
+.purge-backup { margin-top: 12px; }
+.purge-backup p { margin: 4px 0; }

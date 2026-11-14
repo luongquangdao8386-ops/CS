@@ -378,3 +378,62 @@ function readRowsByNums_(name, nums) {
   });
   return out;
 }
+
+/**
+ * Xóa hẳn các dòng có ô `col` thuộc `values` (đọc một-hai cột, xóa từng khối dòng liền nhau từ dưới lên).
+ * Dùng dưới khóa ghi. Trả số dòng đã xóa.
+ */
+function deleteWhere_(name, col, values) {
+  if (!values || !values.length) return 0;
+  var sheet = sh_(name);
+  var last = sheet.getLastRow();
+  if (last < 2) return 0;
+  var h = hdr_(name);
+  var ci = h.idx[col], ki = h.idx[sheetSchema_(name).key];
+  if (ci === undefined) throw new Error('Unknown column ' + name + '.' + col);
+  var want = {};
+  values.forEach(function (v) { want[String(v)] = true; });
+  var vals = sheet.getRange(2, ci + 1, last - 1, 1).getValues();
+  var keys = ci === ki ? vals : sheet.getRange(2, ki + 1, last - 1, 1).getValues();
+  var blocks = [];
+  for (var i = 0; i < vals.length; i++) {
+    var k = keys[i][0];
+    if (k === '' || k === null || !want[String(vals[i][0])]) continue;
+    var b = blocks[blocks.length - 1], rn = i + 2;
+    if (b && rn === b.end + 1) b.end = rn; else blocks.push({ start: rn, end: rn });
+  }
+  if (!blocks.length) return 0;
+  // Sheets không cho xóa hết mọi dòng dưới tiêu đề: luôn để lại dòng trống ở cuối
+  if (sheet.getMaxRows() <= last) ensureRows_(sheet, last + 1, name);
+  var n = 0;
+  for (var j = blocks.length - 1; j >= 0; j--) {
+    sheet.deleteRows(blocks[j].start, blocks[j].end - blocks[j].start + 1);
+    n += blocks[j].end - blocks[j].start + 1;
+  }
+  return n;
+}
+
+/** Đọc vài cột của mọi dòng có khóa (nhẹ hơn readRows_ với bảng có cột JSON lớn như Runs). Trả [{__row, cột…}] */
+function readCols_(name, cols) {
+  var sheet = sh_(name);
+  var last = sheet.getLastRow();
+  if (last < 2) return [];
+  var h = hdr_(name);
+  var types = sheetSchema_(name).types;
+  var key = sheetSchema_(name).key;
+  var list = [key].concat(cols.filter(function (c) { return c !== key; }));
+  var data = {};
+  list.forEach(function (c) {
+    var ci = h.idx[c];
+    data[c] = ci === undefined ? null : sheet.getRange(2, ci + 1, last - 1, 1).getValues();
+  });
+  var out = [];
+  for (var i = 0; i < last - 1; i++) {
+    var kv = data[key][i][0];
+    if (kv === '' || kv === null) continue;
+    var o = { __row: i + 2 };
+    list.forEach(function (c) { o[c] = data[c] ? fromCell_(types[c] || 'STRING', data[c][i][0]) : null; });
+    out.push(o);
+  }
+  return out;
+}

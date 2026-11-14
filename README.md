@@ -7,12 +7,14 @@ Cùng bố cục, màu sắc và lõi đăng nhập/đồng bộ với app M&E. 
 Bản `1.0.0-d1.2` (30/10/2026, nhánh `claude/iso-templates`): bộ mẫu theo biểu ISO cơ điện BM-CĐ-xx + mã biểu mẫu trên PDF/Excel Bảng tháng — xem Phần J của HUONG_DAN_TRIEN_KHAI.md.
 Bản `1.0.0-d1.3` (05/11/2026, nhánh `claude/daily-templates`, phát hành THẬT 05/11/2026 — máy chủ THẬT/THỬ dán Code.gs theo Phần K): bộ mẫu hằng ngày 7 loại máy + bỏ mục "nếu có" theo từng máy — xem Phần K.
 Bản `1.0.0-d1.4` (05/11/2026, phát hành THẬT): số tiêu chuẩn đề xuất cho bộ mẫu hằng ngày (vượt là báo đỏ), mục phải đặt theo từng máy hiện "Chưa đặt tiêu chuẩn", nút *Cập nhật tiêu chuẩn đề xuất* cho mẫu đã tạo — xem Phần L.
+Bản `1.0.0-d1.5` (14/11/2026, chưa phát hành): nút *Xóa hẳn mẫu* — mẫu chưa có lượt kiểm: Trưởng bộ phận/Quản trị (PIN); mẫu đã có lượt kiểm: chỉ owner, gõ XÓA + PIN, xóa theo lượt kiểm/bất thường/lý do bỏ sót/ảnh; điện thoại tự bỏ mẫu đã xóa — xem Phần M.
 
 ## App làm gì
 
 - **Thiết bị và khu vực lấy một chiều từ M&E** (cửa chỉ-đọc `feed.equipment` của M&E, mỗi giờ hoặc bấm *Cập nhật từ M&E*). Thiết bị chỉ sửa ở M&E. Tem QR M&E đang dán trên máy quét được luôn trong Checksheet.
 - **Mẫu checksheet** có phiên bản: tần suất mỗi ca / ngày / tuần / tháng; hạng mục lấy từ thư viện (~34 hạng mục có sẵn: nhiệt độ, áp suất, điện áp, dòng 3 pha, độ rung, mức dầu, rò rỉ…) hoặc tự thêm. Kiểu tiêu chuẩn: khoảng, tối đa, tối thiểu, định mức ± %, không có; ngưỡng *Cần chú ý*; dòng 3 pha tự tính lệch pha. Tiêu chuẩn riêng cho từng máy.
 - **Bộ mẫu theo biểu ISO** (d1.2): nút *Tạo bộ mẫu theo biểu ISO* tạo sẵn 23 mẫu từ bộ biểu kiểm tra BM-CĐ-xx của công ty (chưa gán máy, không tạo trùng); mỗi mẫu có **mã biểu mẫu** in trên PDF/Excel Bảng tháng.
+- **Xóa hẳn mẫu** (d1.5): mẫu chưa có lượt kiểm thì Trưởng bộ phận/Quản trị xóa được; mẫu đã có lượt kiểm chỉ owner xóa, app báo trước số lượt kiểm/bất thường/lý do bỏ sót/ảnh sẽ bị xóa theo, gõ XÓA + PIN. Mã MS không cấp lại; điện thoại tự tải lại, không phải đăng nhập lại.
 - **Bộ mẫu hằng ngày** (d1.3): nút *Tạo bộ mẫu hằng ngày* tạo sẵn 7 mẫu kiểm mỗi ngày (máy phát điện, phòng điện, máy nén khí, máy sấy lạnh, máy sấy hấp thụ, chiller, bơm chiller; mã HN-01…07, không tạo trùng). Mục "nếu có" máy không có thì bỏ ở *Tiêu chuẩn riêng* của máy (**Máy này không có**).
 - **Màn kiểm**: tiêu chuẩn hiện ngay cạnh ô nhập, gõ tới đâu tô màu tới đó (Đạt / Cần chú ý / Không đạt), Không đạt bắt buộc ghi chú, chụp ảnh. Mất mạng vẫn lưu trên máy, có mạng tự gửi. Máy chủ đánh giá lại khi lưu và lưu kèm tiêu chuẩn lúc kiểm.
 - **Trưởng bộ phận**: mục Không đạt chờ xử lý, máy bỏ sót kỳ kiểm (ghi lý do), xác nhận ngày (khóa sửa). Mỗi người chỉ thấy khu vực mình phụ trách.

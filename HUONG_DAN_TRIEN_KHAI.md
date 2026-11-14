@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.4 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026; d1.3 bộ mẫu hằng ngày 7 loại máy; d1.4 số tiêu chuẩn đề xuất)
+# Hướng dẫn triển khai Checksheet — bản 1.0.0-d1.5 (d1.1 THỬ chạy và phát hành THẬT 28/10/2026; d1.2 bộ mẫu theo biểu ISO 30/10/2026; d1.3 bộ mẫu hằng ngày 7 loại máy; d1.4 số tiêu chuẩn đề xuất; d1.5 xóa hẳn mẫu)
 
 Checksheet là app riêng, máy chủ riêng (dự án Apps Script riêng, bảng tính riêng), chỉ **đọc** danh sách thiết bị và khu vực từ M&E.
 Cách làm giống hệt M&E: dán `Code.gs` vào Apps Script, triển khai web app, mở trang app trên GitHub Pages.
@@ -215,6 +215,34 @@ là *Chỉ ghi số*).
    bấm **Cập nhật tiêu chuẩn đề xuất (… mẫu)** → PIN. Chỉ điền mục còn *Không đặt* và ngưỡng Cần chú ý còn trống — số anh/chị đã sửa giữ
    nguyên; mẫu lên phiên bản mới, máy đã gán và tiêu chuẩn riêng giữ nguyên; lượt kiểm cũ giữ tiêu chuẩn lúc kiểm.
 3. **Thiết bị** → từng phòng điện, chiller, bơm có chữ cam *N mục chưa đặt tiêu chuẩn* → **Tiêu chuẩn riêng** → đặt số.
+
+## Phần M — Bản 1.0.0-d1.5: Xóa hẳn mẫu
+
+Màn **Mẫu checksheet** có nút đỏ **Xóa hẳn mẫu…** (chọn một hoặc nhiều mẫu) và trong từng mẫu có nút **Xóa hẳn mẫu**.
+App hỏi máy chủ đếm trước những gì sẽ bị xóa rồi mới cho xác nhận:
+
+| Mẫu | Ai xóa được | Xác nhận | Bị xóa theo |
+| --- | --- | --- | --- |
+| Chưa có lượt kiểm, bất thường, lý do bỏ sót | Trưởng bộ phận, Quản trị | PIN | Mẫu, mọi phiên bản hạng mục, phần gán máy |
+| Đã có lượt kiểm | Chỉ chủ hệ thống (owner) | Gõ chữ **XÓA** + PIN | Như trên + lượt kiểm, bất thường, lý do bỏ sót, ảnh (tệp ảnh trên Drive vào thùng rác, lấy lại được 30 ngày) |
+
+- Hộp xác nhận ghi rõ số lượt kiểm / bất thường (còn mở bao nhiêu) / lý do bỏ sót / ảnh và ngày đầu – ngày cuối của dữ liệu, lần sao lưu gần
+  nhất, nút **Mở Sao lưu**. Nên **Sao lưu ngay**, đợi báo *Đã kiểm chứng* rồi mới xóa (bản sao lưu không chứa ảnh).
+- Có người vừa kiểm thêm sau lúc xem → máy chủ từ chối, app cho xem lại số mới.
+- Chỉ xóa đúng các mẫu đã chọn; mẫu khác, lượt kiểm của mẫu khác không đổi. **Mã MS đã xóa không cấp lại** (mẫu mới lấy số tiếp theo).
+  Bộ mẫu soạn sẵn (ISO, hằng ngày) đã xóa thì tạo lại được, mang mã MS mới.
+- Điện thoại đang mở app: lần đồng bộ tới (mở lại app, quay lại tab, bấm Đồng bộ ngay) tự tải lại dữ liệu và bỏ mẫu đã xóa —
+  **không phải đăng nhập lại**, cả máy chưa tải bản app mới. Phiếu đang chờ gửi của mẫu đã xóa sẽ bị từ chối (*Máy chưa được gán mẫu này*) →
+  xóa nháp đó ở **Nháp chờ gửi**.
+- Nhật ký (Quản trị → Nhật ký, nhóm Mẫu checksheet) ghi `template.purge` kèm mã, tên và số dòng đã xóa của từng mẫu.
+
+### Cập nhật (không cần migrateSchema)
+
+1. **THẬT** (`CS_MayChu_THAT`) rồi **THỬ** (`CS_MayChu_THU`): **Sao lưu ngay** → dán `Code.gs` mới → **Lưu** → **Triển khai → Quản lý các bản
+   triển khai** → bút chì → **Phiên bản mới** → **Triển khai**.
+2. Nói "phát hành Checksheet" để đẩy app lên `main` → mở app → **Tải lại bản mới**.
+3. Xóa 9 mẫu hằng ngày chạy thử MS-0001 → MS-0009: đăng nhập owner → **Mẫu checksheet → Xóa hẳn mẫu…** → tích MS-0001 … MS-0009 →
+   **Tiếp** → xem số đếm → gõ **XÓA** → **Xóa hẳn 9 mẫu** → PIN.
 
 ## Lưu ý an toàn
 

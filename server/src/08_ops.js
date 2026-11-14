@@ -59,6 +59,9 @@ function applyWrites_(writes, replay) {
         if (findRowNums_(w.sheet, key, w.row[key]).length) return;
       }
       (inserts[w.sheet] = inserts[w.sheet] || []).push(w.row);
+    } else if (w.mode === 'delete') {
+      // Xóa hẳn dòng (xóa mẫu): tìm lại theo cột mỗi lần chạy nên chạy lại (replay) không xóa nhầm
+      deleteWhere_(w.sheet, w.col, w.values);
     } else if (w.mode === 'update') {
       var keyU = sheetSchema_(w.sheet).key;
       var rn = findRowNums_(w.sheet, keyU, w.row[keyU])[0];
@@ -95,7 +98,7 @@ function replayPrepared_(ctx, ex) {
 /**
  * Thực hiện một thao tác ghi có xác nhận COMMITTED.
  * opts.build(st) chạy dưới khóa ghi, trả {writes, state, result, audit, record_version, noReplay}.
- *  - writes: [{sheet, mode:'insert'|'update', row, partial?}]
+ *  - writes: [{sheet, mode:'insert'|'update', row, partial?}] hoặc {sheet, mode:'delete', col, values} (xóa hẳn dòng có cột col ∈ values)
  *  - state: {khóa SystemState: [kiểu, giá trị]} (vd code_seq)
  *  - audit: {action, entity_type, entity_id, before_json, after_json, reason}
  */
@@ -113,7 +116,7 @@ function executeWrite_(ctx, opts) {
     var nowIso = isoVN_(now_());
     var touched = {};
     plan.writes.forEach(function (w) {
-      if (sheetSchema_(w.sheet).cols.indexOf('sync_revision') >= 0) w.row.sync_revision = rev;
+      if (w.row && sheetSchema_(w.sheet).cols.indexOf('sync_revision') >= 0) w.row.sync_revision = rev;
       touched[w.sheet] = true;
     });
     var su = plan.state || {};
@@ -357,7 +360,7 @@ function systemWrite_(writes, audit) {
     var rev = Number(stateGet_(st, 'sync_revision', 0)) + 1;
     var touched = {};
     writes.forEach(function (w) {
-      if (sheetSchema_(w.sheet).cols.indexOf('sync_revision') >= 0) w.row.sync_revision = rev;
+      if (w.row && sheetSchema_(w.sheet).cols.indexOf('sync_revision') >= 0) w.row.sync_revision = rev;
       touched[w.sheet] = true;
     });
     applyWrites_(writes, false);

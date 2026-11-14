@@ -36,6 +36,9 @@ var ACTION_TABLE_ = [
   'template.isoList|3|net|R',
   'template.isoSeed|3|pin|W',
   'template.isoUpdate|3|pin|W',
+  // Xóa hẳn mẫu: mẫu đã có dữ liệu kiểm thì chỉ owner (kiểm trong templatePurge_)
+  'template.purgeInfo|3|net|R',
+  'template.purge|3|pin|W',
   'library.edit|3|net|W',
   'assignment.edit|3|net|W',
   'assignment.add|3|net|W',
