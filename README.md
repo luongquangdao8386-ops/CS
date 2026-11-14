@@ -7,7 +7,7 @@ Cùng bố cục, màu sắc và lõi đăng nhập/đồng bộ với app M&E. 
 Bản `1.0.0-d1.2` (30/10/2026, nhánh `claude/iso-templates`): bộ mẫu theo biểu ISO cơ điện BM-CĐ-xx + mã biểu mẫu trên PDF/Excel Bảng tháng — xem Phần J của HUONG_DAN_TRIEN_KHAI.md.
 Bản `1.0.0-d1.3` (05/11/2026, nhánh `claude/daily-templates`, phát hành THẬT 05/11/2026 — máy chủ THẬT/THỬ dán Code.gs theo Phần K): bộ mẫu hằng ngày 7 loại máy + bỏ mục "nếu có" theo từng máy — xem Phần K.
 Bản `1.0.0-d1.4` (05/11/2026, phát hành THẬT): số tiêu chuẩn đề xuất cho bộ mẫu hằng ngày (vượt là báo đỏ), mục phải đặt theo từng máy hiện "Chưa đặt tiêu chuẩn", nút *Cập nhật tiêu chuẩn đề xuất* cho mẫu đã tạo — xem Phần L.
-Bản `1.0.0-d1.5` (14/11/2026, chưa phát hành): nút *Xóa hẳn mẫu* — mẫu chưa có lượt kiểm: Trưởng bộ phận/Quản trị (PIN); mẫu đã có lượt kiểm: chỉ owner, gõ XÓA + PIN, xóa theo lượt kiểm/bất thường/lý do bỏ sót/ảnh; điện thoại tự bỏ mẫu đã xóa — xem Phần M.
+Bản `1.0.0-d1.5` (14/11/2026, phát hành THẬT 14/11/2026 — máy chủ THẬT/THỬ dán Code.gs theo Phần M): nút *Xóa hẳn mẫu* — mẫu chưa có lượt kiểm: Trưởng bộ phận/Quản trị (PIN); mẫu đã có lượt kiểm: chỉ owner, gõ XÓA + PIN, xóa theo lượt kiểm/bất thường/lý do bỏ sót/ảnh; điện thoại tự bỏ mẫu đã xóa — xem Phần M.
 
 ## App làm gì
 
