@@ -1,7 +1,7 @@
 // Chờ xử lý (Trưởng bộ phận): mục Không đạt chưa xử lý, máy bỏ sót kỳ kiểm, ngày chưa xác nhận — cần mạng để ghi
 import { bi, esc, fmtDate, fmtDateTime, nameText, uuid } from '../core.js';
 import { ICON, dialog, toast, $, $$ } from '../ui.js';
-import { openAbnormals, missedPeriods, unconfirmedDays, mapOf, recs, roleLevel, myAreas, today, users, userName, weekday } from '../data.js';
+import { openAbnormals, missedPeriods, unconfirmedDays, mapOf, recs, roleLevel, myAreas, today, users, userName, weekday, backdateDays } from '../data.js';
 import { addDaysIso } from '../judge.js';
 import { writeOnline, writeWithPin, writeFail, oneLang, busy } from '../form.js';
 import { app, afterCommit } from '../app.js';
@@ -35,7 +35,7 @@ export async function renderPending(view, { shell }) {
   const mine = myAreas();
   const again = () => renderPending(view, { shell });
   const tabs = [['abn', 'pend.tab_abn', abn.length], ['missed', 'pend.tab_missed', missed.length], ['days', 'pend.tab_days', days.length]];
-  const backLimit = addDaysIso(today(), -7);
+  const backLimit = addDaysIso(today(), -backdateDays());
   let body = '';
   if (tab === 'abn') {
     body = abn.map((a) => {

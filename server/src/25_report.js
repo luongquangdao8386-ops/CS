@@ -444,8 +444,10 @@ function monthGrid_(md, tpl, shift, people) {
     var run = runBy[per.key] || null;
     var started = sp.start <= nowMs, ended = sp.end <= nowMs;
     var inScope = !asg || !asg.start_date || per.last >= asg.start_date;
-    if (run) { counts.due++; counts.done++; counts.fail += run.fail_count || 0; counts.warn += run.warn_count || 0; } else if (ended && inScope && asg && asg.active) counts.due++;
-    return { run: run, miss: !run && ended && inScope && !!asg && asg.active, excused: !!missedBy[per.key], future: !started };
+    // Bỏ sót chỉ khi gán mẫu, mẫu và máy đều còn dùng (như Chờ xử lý và Bảng tháng trên app)
+    var due = ended && inScope && !!asg && !!asg.active && !!tpl.active && !!md.machine.active;
+    if (run) { counts.due++; counts.done++; counts.fail += run.fail_count || 0; counts.warn += run.warn_count || 0; } else if (due) counts.due++;
+    return { run: run, miss: !run && due, excused: !!missedBy[per.key], future: !started };
   });
   var head = ['#', lab_('rpt.col_item'), lab_('rpt.col_std')].concat(periods.map(function (p) { return p.label; }));
   var rows = [], colors = [];
@@ -557,7 +559,9 @@ function reportPdfAction_(ctx) {
   var people = { list: [], map: {} };
   var shiftsAll = shiftsCfg_();
   tpls.forEach(function (tpl) {
-    var shifts = tpl.frequency === 'SHIFT' ? String(tpl.shifts || '').split(',').filter(String) : [''];
+    var shifts = tpl.frequency === 'SHIFT' ? tplShifts_(tpl) : [''];
+    // Ca có lượt kiểm trong tháng mà mẫu/giờ ca đã bỏ: vẫn in (như Bảng tháng trên app)
+    if (tpl.frequency === 'SHIFT') md.runs.forEach(function (r) { if (r.template_id === tpl.template_id && r.shift && shifts.indexOf(String(r.shift)) < 0) shifts.push(String(r.shift)); });
     if (tpl.frequency === 'SHIFT' && p.shift && shifts.indexOf(String(p.shift)) >= 0) shifts = [String(p.shift)];
     shifts.forEach(function (sh) {
       var g = monthGrid_(md, tpl, sh, people);

@@ -87,3 +87,22 @@ test('ca, kỳ, các kỳ của bảng tháng, mốc kỳ: app = máy chủ (ca 
     }
   }
 });
+
+test('ca của mẫu theo Giờ ca đang cài: app = máy chủ; ca đã bớt không thành kỳ bỏ sót, không là kỳ đang chạy', () => {
+  const env = freshServer();
+  const g = env.g;
+  const two = [{ no: 1, start: '07:00', end: '19:00' }, { no: 2, start: '19:00', end: '07:00' }];
+  env.g.writeSetting_('shifts_json', two, 'TEST');
+  g.dbReset_();
+  const sh = J.shiftsFrom({ shifts_json: g.shiftsCfg_() });
+  for (const s of ['1,2,3', '3', '2,1', '', '1, 2']) {
+    assert.deepEqual(J.tplShifts({ shifts: s }, sh), plain(g.tplShifts_({ shifts: s })), s);
+  }
+  const tpl = { frequency: 'SHIFT', shifts: '1,2,3' };
+  const ended = J.endedPeriods(tpl, Date.parse('2026-10-29T08:00:00+07:00'), 2, sh);
+  assert.ok(ended.length > 0);
+  assert.ok(ended.every((p) => p.shift === '1' || p.shift === '2'), JSON.stringify(ended));
+  // Mẫu chỉ còn ca đã bớt: không có kỳ đang chạy
+  assert.equal(J.currentPeriod({ frequency: 'SHIFT', shifts: '3' }, new Date('2026-10-29T08:00:00+07:00'), sh), null);
+  assert.equal(J.currentPeriod(tpl, new Date('2026-10-29T08:00:00+07:00'), sh).shift, '1');
+});

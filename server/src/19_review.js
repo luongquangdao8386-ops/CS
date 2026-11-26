@@ -33,14 +33,14 @@ function missedReason_(ctx) {
   if (!isUuidV4_(p.missed_id)) throw validationError_([fieldError_('missed_id', 'ID_INVALID')]);
   var cur = findOne_('MissedReasons', 'missed_id', p.missed_id);
   var asg = findOne_('Assignments', 'assignment_id', cur ? cur.assignment_id : p.assignment_id);
-  if (!asg) throw validationError_([fieldError_('assignment_id', 'NOT_ASSIGNED')]);
-  var tpl = findOne_('Templates', 'template_id', asg.template_id);
+  var tpl = asg ? findOne_('Templates', 'template_id', asg.template_id) : null;
+  if (!asg || !tpl) throw validationError_([fieldError_('assignment_id', 'NOT_ASSIGNED')]);
   var wd = cur ? cur.work_date : trimStr_(p.work_date);
   var shift = cur ? String(cur.shift || '') : (tpl.frequency === 'SHIFT' ? trimStr_(p.shift) : '');
   var errs = [];
   requireOneLang_(errs, p, null, 'reason');
   if (!isDateStr_(wd) || wd > todayVN_()) errs.push(fieldError_('work_date', 'PERIOD_INVALID'));
-  if (tpl.frequency === 'SHIFT' && String(tpl.shifts || '').split(',').indexOf(shift) < 0) errs.push(fieldError_('shift', 'PERIOD_INVALID'));
+  if (!cur && tpl.frequency === 'SHIFT' && tplShifts_(tpl).indexOf(shift) < 0) errs.push(fieldError_('shift', 'PERIOD_INVALID'));
   if (errs.length) throw validationError_(errs);
   var periodKey = periodKey_(tpl.frequency, wd, shift);
   var tr = applyTranslations_('MissedReasons', ['reason'], p, cur);
@@ -50,7 +50,7 @@ function missedReason_(ctx) {
       var now = findOne_('MissedReasons', 'missed_id', p.missed_id);
       if (now) assertVersion_(ctx, now, 'MISSED', 'MissedReasons');
       else {
-        var hasRun = findAll_('Runs', 'assignment_id', asg.assignment_id).some(function (r) { return r.period_key === periodKey && !r.archived_at; });
+        var hasRun = findAllWhere2_('Runs', 'period_key', periodKey, 'assignment_id', asg.assignment_id).some(function (r) { return !r.archived_at; });
         if (hasRun) throw validationError_([fieldError_('period_key', 'STATUS_INVALID')]);
       }
       var row = Object.assign({}, now || {}, tr.values, {

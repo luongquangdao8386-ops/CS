@@ -169,6 +169,13 @@ function shiftsOk_(list) {
   });
 }
 
+/** Ca của mẫu theo ca còn trong giờ ca đang cài (Quản trị bớt ca 3 thì mẫu "1,2,3" chỉ còn ca 1, 2) */
+function tplShifts_(tpl) {
+  var have = shiftsCfg_().map(function (s) { return String(s.no); });
+  return String((tpl && tpl.shifts) || '').split(',').map(function (x) { return x.trim(); })
+    .filter(function (x, i, a) { return x && have.indexOf(x) >= 0 && a.indexOf(x) === i; });
+}
+
 function shiftsCfg_() {
   var s = setting_('shifts_json');
   if (!shiftsOk_(s)) s = DEFAULT_SHIFTS_;

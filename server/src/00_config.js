@@ -5,7 +5,7 @@
  * ===================================================================== */
 
 var APP_ID = 'CS';
-var SERVER_VERSION = '1.0.0-d1.5';
+var SERVER_VERSION = '1.0.0-d1.6';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.0.0';
 var TZ = 'Asia/Ho_Chi_Minh';
@@ -66,7 +66,7 @@ var SETTINGS_DEFAULTS = [
   ['shifts_json', 'JSON', DEFAULT_SHIFTS_, true, 1, 'Giờ các ca (ca qua nửa đêm tính vào ngày bắt đầu ca)', '班次时间（跨午夜的班次计入开始日期）'],
   ['runs_sync_days', 'INT', 40, true, 1, 'Số ngày lượt kiểm giữ trên máy', '本机保留点检记录天数'],
   ['missed_lookback_days', 'INT', 7, true, 1, 'Số ngày xem lại máy bỏ sót', '回看漏检天数'],
-  ['check_backdate_days', 'INT', 7, false, 1, 'Lượt kiểm ghi muộn tối đa (ngày, khi mất mạng)', '离线补交点检最长天数'],
+  ['check_backdate_days', 'INT', 7, true, 1, 'Lượt kiểm ghi muộn tối đa (ngày, khi mất mạng)', '离线补交点检最长天数'],
   ['report_logo_file_id', 'STRING', '', false, 1, 'Tệp logo trên báo cáo (Drive)', '报表标志文件（云端硬盘）'],
   ['report_logo_rev', 'STRING', '', true, 1, 'Phiên bản logo trên báo cáo', '报表标志版本']
 ];

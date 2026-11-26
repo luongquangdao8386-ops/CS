@@ -421,6 +421,7 @@ export const DICT = {"rpt.title":["Phiếu kiểm tra thiết bị","设备点�
 "check.ro_others":["Kỳ này người khác đã kiểm — chỉ xem (Trưởng bộ phận sửa được)","本周期已由他人点检，仅可查看（部门主管可修改）"],
 "check.ro_old":["Kỳ này đã quá hạn ghi bù","本周期已超过补录期限"],
 "check.ro_inactive":["Máy hoặc mẫu đã ngừng dùng — chỉ xem","设备或模板已停用，仅可查看"],
+"check.ro_future":["Kỳ này chưa bắt đầu — chưa kiểm được","该周期尚未开始，暂不能点检"],
 "chk.std":["Tiêu chuẩn","标准"],
 "chk.warn_at":["chú ý","关注"],
 "chk.own_std":["tiêu chuẩn riêng của máy","本机专用标准"],

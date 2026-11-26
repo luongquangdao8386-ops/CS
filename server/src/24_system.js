@@ -17,10 +17,12 @@ function projectAudit_(ctx, a, dir) {
 function auditOwn_(ctx) {
   var uid = ctx.user.user_id;
   var dir = userDirectory_();
-  var logs = findAll_('AuditLogs', 'user_id', uid).sort(function (a, b) { return String(b.occurred_at).localeCompare(String(a.occurred_at)); })
-    .slice(0, 200).map(function (a) { return projectAudit_(ctx, a, dir); });
-  var ops = findAll_('Operations', 'user_id', uid).sort(function (a, b) { return String(b.received_at).localeCompare(String(a.received_at)); })
-    .slice(0, 100).map(function (o) {
+  // Nhật ký ghi nối đuôi theo thời gian: chỉ đọc các dòng cuối của người này (không đọc mọi dòng từ trước tới nay)
+  var lastOf = function (name, n) { return readRowsByNums_(name, findRowNums_(name, 'user_id', uid).slice(-n)); };
+  var logs = lastOf('AuditLogs', 200).sort(function (a, b) { return String(b.occurred_at).localeCompare(String(a.occurred_at)); })
+    .map(function (a) { return projectAudit_(ctx, a, dir); });
+  var ops = lastOf('Operations', 100).sort(function (a, b) { return String(b.received_at).localeCompare(String(a.received_at)); })
+    .map(function (o) {
       return { operation_id: o.operation_id, action: o.action, entity_type: o.entity_type, entity_id: o.entity_id, state: o.state, result_code: o.result_code, received_at: o.received_at, committed_at: o.committed_at };
     });
   return { items: logs, operations: ops };
@@ -36,18 +38,25 @@ function auditView_(ctx) {
   var limit = Math.min(500, Number(p.limit) || 200);
   var from = p.from && isDateStr_(p.from) ? p.from : '', to = p.to && isDateStr_(p.to) ? p.to : '';
   var items = [];
-  var rows = readRows_('AuditLogs');
-  for (var i = rows.length - 1; i >= 0 && items.length < limit; i--) {
-    var a = rows[i];
-    var act = String(a.action || '');
-    if (lvl < 4 && ADMIN_ACTION_PREFIX_.some(function (x) { return act.indexOf(x) === 0; })) continue;
-    if (p.entity_id && a.entity_id !== p.entity_id) continue;
-    if (p.user_id && a.user_id !== p.user_id) continue;
-    if (p.action && act.indexOf(p.action) !== 0) continue;
-    var day = String(a.occurred_at).slice(0, 10);
-    if (from && day < from) continue;
-    if (to && day > to) continue;
-    items.push(projectAudit_(ctx, a, dir));
+  // Đọc từ cuối bảng lên theo từng khúc (nhật ký chỉ tăng): đủ số dòng hoặc qua ngày "từ" thì dừng, không đọc cả bảng
+  var sheet = sh_('AuditLogs'), last = sheet.getLastRow(), h = hdr_('AuditLogs');
+  var CH = 1000, older = false;
+  for (var end = last; end >= 2 && items.length < limit && !older; end -= CH) {
+    var start = Math.max(2, end - CH + 1);
+    var vals = sheet.getRange(start, 1, end - start + 1, h.cols.length).getValues();
+    for (var i = vals.length - 1; i >= 0 && items.length < limit; i--) {
+      if (vals[i][0] === '' || vals[i][0] === null) continue;
+      var a = rowToObj_('AuditLogs', h, vals[i], start + i);
+      var day = String(a.occurred_at).slice(0, 10);
+      if (from && day < from) { older = true; break; }
+      var act = String(a.action || '');
+      if (lvl < 4 && ADMIN_ACTION_PREFIX_.some(function (x) { return act.indexOf(x) === 0; })) continue;
+      if (p.entity_id && a.entity_id !== p.entity_id) continue;
+      if (p.user_id && a.user_id !== p.user_id) continue;
+      if (p.action && act.indexOf(p.action) !== 0) continue;
+      if (to && day > to) continue;
+      items.push(projectAudit_(ctx, a, dir));
+    }
   }
   items.sort(function (x, y) { return String(y.occurred_at).localeCompare(String(x.occurred_at)); });
   return { items: items, more: items.length >= limit };

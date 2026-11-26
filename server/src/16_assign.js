@@ -65,7 +65,8 @@ function assignmentEdit_(ctx) {
       var row = Object.assign({}, now || {}, {
         assignment_id: id, machine_id: machineId, template_id: templateId, active: active, overrides_json: ov,
         note: p.note !== undefined ? trimStr_(p.note).slice(0, 300) : (now ? now.note : ''),
-        start_date: now ? now.start_date : todayVN_()
+        // Gán lại sau khi ngừng: tính kỳ từ hôm nay (những ngày đã ngừng gán không thành "bỏ sót")
+        start_date: now && !(active && !now.active) ? now.start_date : todayVN_()
       });
       delete row.__row;
       if (now) cUpdate_(ctx, row); else cNew_(ctx, row);
@@ -98,7 +99,7 @@ function assignmentAdd_(ctx) {
         var ex = mine.filter(function (a) { return a.machine_id === mid; });
         if (ex.some(function (a) { return a.active; })) { skipped++; return; }
         if (ex.length) {
-          var row = Object.assign({}, ex[0], { active: true });
+          var row = Object.assign({}, ex[0], { active: true, start_date: todayVN_() });
           delete row.__row;
           cUpdate_(ctx, row);
           writes.push({ sheet: 'Assignments', mode: 'update', row: row });

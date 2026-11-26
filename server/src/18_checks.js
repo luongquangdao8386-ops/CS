@@ -103,7 +103,8 @@ function checkSubmit_(ctx) {
   var freq = tpl.frequency;
   var errs = [];
   if (!isDateStr_(wd)) errs.push(fieldError_('work_date', 'PERIOD_INVALID'));
-  if (freq === 'SHIFT') { if (String(tpl.shifts || '').split(',').indexOf(shift) < 0) errs.push(fieldError_('shift', 'PERIOD_INVALID')); } else shift = '';
+  // Lượt mới: ca phải thuộc mẫu và còn trong giờ ca đang cài; sửa lượt đã có thì giữ ca cũ
+  if (freq === 'SHIFT') { if (!cur && tplShifts_(tpl).indexOf(shift) < 0) errs.push(fieldError_('shift', 'PERIOD_INVALID')); } else shift = '';
   if (!errs.length && !cur) {
     var today = todayVN_();
     var back = Number(setting_('check_backdate_days') || 7);
@@ -125,7 +126,8 @@ function checkSubmit_(ctx) {
         assertVersion_(ctx, now, 'RUN', 'Runs');
         if (now.checked_by !== ctx.user.user_id && lvl < 3) throw apiError_('FORBIDDEN');
       } else {
-        var dup = findAll_('Runs', 'assignment_id', asg.assignment_id).filter(function (r) { return r.period_key === periodKey && !r.archived_at; })[0];
+        // Chỉ đọc lượt của đúng gán mẫu + kỳ (không đọc mọi lượt cũ của gán mẫu: số lượt tăng mỗi ca)
+        var dup = findAllWhere2_('Runs', 'period_key', periodKey, 'assignment_id', asg.assignment_id).filter(function (r) { return !r.archived_at; })[0];
         if (dup) throw apiError_('VALIDATION_ERROR', { existing: projectRow_(ctx, dup) }, [fieldError_('run_id', 'RUN_EXISTS')]);
       }
       if (dayLocked_(wd, mac.area_id)) throw validationError_([fieldError_('work_date', 'RUN_LOCKED')]);
@@ -191,9 +193,11 @@ function monthData_(machineId, ym) {
   var mac = findOne_('Machines', 'machine_id', machineId);
   if (!mac) throw apiError_('NOT_FOUND');
   var inMonth = function (r) { return String(r.work_date || '').slice(0, 7) === ym && !r.archived_at; };
-  var runs = readRowsByNums_('Runs', findRowNums_('Runs', 'machine_id', mac.machine_id)).filter(inMonth);
-  var abn = readRowsByNums_('Abnormals', findRowNums_('Abnormals', 'machine_id', mac.machine_id)).filter(function (a) { return inMonth(a) && a.status !== 'CANCELLED'; });
-  var missed = readRowsByNums_('MissedReasons', findRowNums_('MissedReasons', 'machine_id', mac.machine_id)).filter(inMonth);
+  // Lọc theo máy + tháng trên hai cột trước, chỉ đọc trọn các dòng của tháng (không đọc mọi lượt kiểm từ trước tới nay của máy)
+  var macMonth = function (r) { return r.machine_id === mac.machine_id && String(r.work_date || '').slice(0, 7) === ym; };
+  var runs = readRowsWhere_('Runs', ['machine_id', 'work_date'], macMonth).filter(inMonth);
+  var abn = readRowsWhere_('Abnormals', ['machine_id', 'work_date'], macMonth).filter(function (a) { return inMonth(a) && a.status !== 'CANCELLED'; });
+  var missed = readRowsWhere_('MissedReasons', ['machine_id', 'work_date'], macMonth).filter(inMonth);
   var confirms = readRows_('DayConfirms').filter(function (c) { return inMonth(c) && (c.area_id === '*' || c.area_id === mac.area_id); });
   var asg = findAll_('Assignments', 'machine_id', mac.machine_id).filter(function (a) { return !a.archived_at; });
   var tplIds = {};

@@ -244,6 +244,29 @@ App hỏi máy chủ đếm trước những gì sẽ bị xóa rồi mới cho 
 3. Xóa 9 mẫu hằng ngày chạy thử MS-0001 → MS-0009: đăng nhập owner → **Mẫu checksheet → Xóa hẳn mẫu…** → tích MS-0001 … MS-0009 →
    **Tiếp** → xem số đếm → gõ **XÓA** → **Xóa hẳn 9 mẫu** → PIN.
 
+## Phần N — Bản 1.0.0-d1.6: rà soát lỗi (lưu nhanh khi dữ liệu nhiều, bỏ sót đúng hơn)
+
+Không thêm màn mới; sửa các lỗi tìm được khi rà soát cả app:
+
+| Lỗi | Trước | Sau |
+| --- | --- | --- |
+| Lưu phiếu chậm dần | Mỗi lần lưu, máy chủ đọc lại **từng lượt kiểm cũ** của máy đó (mẫu theo ca: thêm ~1 000 lần đọc mỗi năm) — vài tháng là lưu mất hàng chục giây, người khác bị *Máy chủ đang bận* | Chỉ đọc đúng lượt cùng kỳ; không tăng theo số lượt cũ. Lý do bỏ sót cũng vậy |
+| Đồng bộ, Bảng tháng, PDF chậm dần | Mỗi lần đồng bộ đọc **cả bảng lượt kiểm** (khoảng 200 lượt là bộ nhớ đệm hết tác dụng); Bảng tháng/PDF tháng cũ đọc mọi lượt của máy | Chỉ đọc lượt mới đổi / lượt trong 40 ngày / lượt của đúng tháng |
+| Nhật ký chậm | *Nhật ký của tôi* đọc từng dòng nhật ký; Quản trị → Nhật ký đọc cả bảng | Chỉ đọc các dòng gần nhất |
+| Bỏ sót sai khi **ngừng mẫu** hoặc **máy ngừng sử dụng** (M&E) | Bảng tháng và PDF tô "–" mọi ngày sau khi ngừng | Không tính bỏ sót (như Chờ xử lý và lịch tuần) |
+| Bỏ sót sai khi **gán lại** máy đã ngừng gán, **dùng lại** mẫu đã ngừng | Những ngày đã ngừng thành "bỏ sót" (Chờ xử lý bắt ghi lý do, PDF tô "–") | Tính kỳ từ ngày gán lại / dùng lại. Đổi lại: kỳ bỏ sót *trước lúc ngừng* trong tháng đó không còn tô "–" |
+| Bớt ca trong **Giờ ca** (vd 3 ca → 2 kíp 12 giờ) | Mẫu "ca 1, 2, 3" vẫn còn ca 3 ma: mỗi ngày báo bỏ sót ca 3, Bảng tháng/PDF có bảng ca 3 trống | Ca không còn trong Giờ ca thì không tính; lượt kiểm cũ của ca đó vẫn hiện |
+| Số ngày **ghi bù** | App luôn cho 7 ngày dù Cấu hình `check_backdate_days` khác → phiếu bị từ chối hoặc không ghi bù được | App theo đúng Cấu hình |
+| **Đổi kỳ** | Chọn được kỳ chưa bắt đầu (vd ca 3 lúc đang ca 1) và lưu trước | Kỳ chưa bắt đầu chỉ xem (cho sớm tối đa 15 phút) |
+| `runs_sync_days` < 31 | Đầu tháng hiện "bỏ sót" sai vì máy không còn lượt kiểm cũ | Hỏi máy chủ; ngày xem lại bỏ sót không vượt số ngày giữ trên máy |
+
+### Cập nhật (không cần migrateSchema)
+
+1. **THẬT** (`CS_MayChu_THAT`) rồi **THỬ** (`CS_MayChu_THU`): **Sao lưu ngay** → dán `Code.gs` mới → **Lưu** → **Triển khai → Quản lý các bản
+   triển khai** → bút chì → **Phiên bản mới** → **Triển khai**.
+2. Nói "phát hành Checksheet" để đẩy app lên `main` → mở app → **Tải lại bản mới**.
+3. Không phải làm gì thêm. Máy đang gán từ trước giữ nguyên ngày bắt đầu; chỉ lần gán lại / dùng lại mẫu sau bản này mới đặt lại ngày bắt đầu.
+
 ## Lưu ý an toàn
 
 - **Mã kết nối M&E** giống mật khẩu: chỉ dán ở màn Kết nối M&E. Lộ mã: bên M&E xóa thuộc tính `FEED_KEY_CS` → chạy lại `adminCreateFeedKey` → nhập mã mới bên Checksheet.

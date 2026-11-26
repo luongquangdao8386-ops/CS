@@ -143,8 +143,20 @@ function templateArchive_(ctx) {
       var row = Object.assign({}, now, { active: !!p.active });
       delete row.__row;
       cUpdate_(ctx, row);
+      var writes = [{ sheet: 'Templates', mode: 'update', row: row }];
+      // Dùng lại mẫu đã ngừng: máy đang gán tính kỳ từ hôm nay (những ngày mẫu ngừng không thành "bỏ sót")
+      if (row.active && !now.active) {
+        var today = todayVN_();
+        readRows_('Assignments').forEach(function (a) {
+          if (a.template_id !== p.template_id || !a.active || a.archived_at || String(a.start_date || '') >= today) return;
+          var u = Object.assign({}, a, { start_date: today });
+          delete u.__row;
+          cUpdate_(ctx, u);
+          writes.push({ sheet: 'Assignments', mode: 'update', row: u });
+        });
+      }
       return {
-        writes: [{ sheet: 'Templates', mode: 'update', row: row }],
+        writes: writes,
         result: { template: projectRow_(ctx, row), record_version: row.record_version }, record_version: row.record_version,
         audit: { entity_type: 'TEMPLATE', entity_id: p.template_id, before_json: { active: now.active }, after_json: { active: row.active } }
       };

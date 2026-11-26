@@ -4,15 +4,16 @@
 import { bi, biText, esc, session, uuid, isoNowVN, fmtDate, fmtDateTime, nameText, blobToB64 } from '../core.js';
 import { ICON, toast, dialog, $, $$ } from '../ui.js';
 import { enqueue } from '../sync.js';
-import { byId, recs, templateItems, roleLevel, can, today, nowMs, shifts, dayLocked, users, userName, queuedRuns } from '../data.js';
-import { effItem, judgeItem, stdText, warnText, fmtNumVi, stdBounds, currentPeriod, periodKey, periodSpan, addDaysIso, isoWeekKey, needStd } from '../judge.js';
+import { byId, recs, templateItems, roleLevel, can, today, nowMs, shifts, dayLocked, users, userName, queuedRuns, backdateDays, currentShift } from '../data.js';
+import { effItem, judgeItem, stdText, warnText, fmtNumVi, stdBounds, currentPeriod, periodKey, periodSpan, addDaysIso, isoWeekKey, needStd, tplShifts } from '../judge.js';
 import { loadFormDraft, saveFormDraft, clearFormDraft } from '../form.js';
 import { processPhoto } from '../media.js';
 import { app, syncNow, updateSyncStatus, refreshAfterSend } from '../app.js';
 import { navigate } from '../router.js';
 
 const MAX_PHOTOS = 3;
-const BACKDATE_DAYS = 7;
+/** Cho kiểm sớm trước giờ bắt đầu kỳ tối đa (phút) */
+const EARLY_MIN = 15;
 
 /** Ô số: "5,4" và "5.4" đều được; trống → null; sai → NaN */
 export function parseNum(raw) {
@@ -55,7 +56,7 @@ function valFromResult(r) {
 
 /** Kỳ mặc định khi mẫu theo ca không có ca đang chạy: ca gần nhất đã bắt đầu của mẫu */
 function lastStartedShiftPeriod(tpl, sh) {
-  const allowed = String(tpl.shifts || '').split(',').filter(Boolean);
+  const allowed = tplShifts(tpl, sh);
   const now = nowMs();
   for (let back = 0; back <= 1; back++) {
     const d = addDaysIso(today(), -back);
@@ -112,9 +113,11 @@ export async function renderCheck(view, { shell, params, query }) {
   const locked = await dayLocked(per.work_date, mac.area_id);
   const canCheck = await can('check.submit');
   const others = run && run.checked_by !== me && lvl < 3;
-  const tooOld = !run && per.work_date < addDaysIso(today(), -BACKDATE_DAYS);
-  const ro = !canCheck || locked || others || tooOld || !mac.active || (!run && (!asg.active || !tpl.active));
-  const roWhy = !canCheck ? 'check.ro_level' : locked ? 'check.ro_locked' : others ? 'check.ro_others' : tooOld ? 'check.ro_old' : 'check.ro_inactive';
+  const tooOld = !run && per.work_date < addDaysIso(today(), -backdateDays());
+  // Kỳ chưa bắt đầu (vd chọn ca 3 lúc đang ca 1): chưa cho kiểm trước
+  const notYet = !run && !queued && periodSpan(tpl.frequency, { date: per.work_date, last: per.work_date }, per.shift, sh).start > nowMs() + EARLY_MIN * 60000;
+  const ro = !canCheck || locked || others || tooOld || notYet || !mac.active || (!run && (!asg.active || !tpl.active));
+  const roWhy = !canCheck ? 'check.ro_level' : locked ? 'check.ro_locked' : others ? 'check.ro_others' : tooOld ? 'check.ro_old' : notYet ? 'check.ro_future' : 'check.ro_inactive';
 
   // ---- Giá trị ban đầu: nháp đang gõ > bản trong hàng chờ > bản máy chủ ----
   const draftKey = 'check:' + asg.assignment_id + '|' + per.period_key;
@@ -423,17 +426,21 @@ export async function renderCheck(view, { shell, params, query }) {
 /** Đổi kỳ (ghi bù kỳ đã qua trong 7 ngày) */
 async function pickPeriod(tpl, per, sh, asg) {
   const dates = [];
-  for (let k = 0; k <= BACKDATE_DAYS; k++) dates.push(addDaysIso(today(), -k));
-  const allowed = String(tpl.shifts || '').split(',').filter(Boolean);
+  const back = backdateDays();
+  // Từ ngày làm việc hiện tại (02:00 sáng còn thuộc ngày hôm trước) lùi về, không quá hạn ghi bù của máy chủ
+  const minDate = addDaysIso(today(), -back);
+  for (let d = currentShift().work_date; d >= minDate; d = addDaysIso(d, -1)) dates.push(d);
+  const allowed = tplShifts(tpl, sh);
   const v = await dialog({
     title: bi('check.change_period'),
     body: `<label class="lbl" for="pp-d">${bi('check.work_date')}</label>
       <select class="inp sel" id="pp-d">${dates.map((d) => `<option value="${d}"${d === per.work_date ? ' selected' : ''}>${esc(fmtDate(d))}${tpl.frequency === 'WEEK' ? ' · W' + isoWeekKey(d).slice(-2) : ''}</option>`).join('')}</select>
       ${tpl.frequency === 'SHIFT' ? `<label class="lbl" for="pp-s">${bi('check.shift')}</label><select class="inp sel" id="pp-s">${allowed.map((s) => `<option value="${s}"${s === per.shift ? ' selected' : ''}>${esc(biText('shift.name' + s))}</option>`).join('')}</select>` : ''}
-      <p class="muted small">${bi('check.period_hint', { N: BACKDATE_DAYS })}</p>`,
+      <p class="muted small">${bi('check.period_hint', { N: back })}</p>`,
     actions: [{ label: bi('btn.cancel'), value: null }, { label: bi('btn.open'), kind: 'primary', read: (w) => ({ d: $('#pp-d', w).value, s: tpl.frequency === 'SHIFT' ? $('#pp-s', w).value : '' }) }]
   });
   if (!v) return;
+  if (periodSpan(tpl.frequency, { date: v.d, last: v.d }, v.s, sh).start > nowMs() + EARLY_MIN * 60000) { toast(bi('check.ro_future'), 'err'); return; }
   const now = currentPeriod(tpl, new Date(nowMs()), sh);
   if (now && now.work_date === v.d && now.shift === v.s) { navigate('/check/' + encodeURIComponent(asg.assignment_id), { replace: true }); return; }
   navigate(`/check/${encodeURIComponent(asg.assignment_id)}?d=${v.d}${v.s ? '&s=' + v.s : ''}`, { replace: true });

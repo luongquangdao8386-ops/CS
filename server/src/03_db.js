@@ -174,8 +174,27 @@ function findOne_(name, col, value) {
   return readRowAt_(name, rows[0]);
 }
 
+/** Mọi dòng có ô `col` = `value`, đọc theo khối dòng liền nhau (không đọc từng dòng một) */
 function findAll_(name, col, value) {
-  return findRowNums_(name, col, value).map(function (r) { return readRowAt_(name, r); });
+  return readRowsByNums_(name, findRowNums_(name, col, value));
+}
+
+/**
+ * Các dòng thỏa đồng thời hai cột (giao hai lần tìm TextFinder) rồi chỉ đọc các dòng đó.
+ * Dùng khi một cột có rất nhiều dòng trùng (vd lượt kiểm của một gán mẫu tăng mỗi ca) mà cặp cột chỉ có vài dòng.
+ */
+function findAllWhere2_(name, col1, v1, col2, v2) {
+  var a = findRowNums_(name, col1, v1);
+  if (!a.length) return [];
+  var b = {};
+  findRowNums_(name, col2, v2).forEach(function (n) { b[n] = true; });
+  return readRowsByNums_(name, a.filter(function (n) { return b[n]; }));
+}
+
+/** Đọc các dòng có cột thỏa `pred` (đọc vài cột trước, rồi chỉ đọc trọn các dòng cần) */
+function readRowsWhere_(name, cols, pred) {
+  var nums = readCols_(name, cols).filter(pred).map(function (r) { return r.__row; });
+  return readRowsByNums_(name, nums);
 }
 
 function ensureRows_(sheet, needLastRow, name) {

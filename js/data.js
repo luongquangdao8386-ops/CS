@@ -2,7 +2,7 @@
 // danh sách máy phải kiểm kỳ này, việc chờ Trưởng bộ phận (bất thường, bỏ sót, xác nhận ngày)
 import { session, todayVN } from './core.js';
 import { getRecords, getMeta, queueItems, KEY } from './sync.js';
-import { shiftsFrom, currentPeriod, endedPeriods, periodKey, periodSpan, addDaysIso, shiftAt } from './judge.js';
+import { shiftsFrom, currentPeriod, endedPeriods, periodKey, periodSpan, addDaysIso, shiftAt, tplShifts } from './judge.js';
 
 export { KEY };
 
@@ -99,10 +99,21 @@ export function weekday(iso) {
 export function daysBetween(a, b) {
   return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
 }
+/** Số ngày lượt kiểm giữ trên máy (như syncFromDate_ của máy chủ) */
+function syncDays() { return Math.max(7, Number(session.settings && session.settings.runs_sync_days) || 40); }
 /** Ngày đầu tiên có lượt kiểm trên máy (cũ hơn thì phải hỏi máy chủ: check.month) */
 export function localFrom() {
-  const n = Math.max(7, Number(session.settings && session.settings.runs_sync_days) || 40);
-  return addDaysIso(today(), -n);
+  return addDaysIso(today(), -syncDays());
+}
+/** Ghi bù tối đa bao nhiêu ngày (Cấu hình check_backdate_days của máy chủ; máy chủ cũ chưa gửi thì 7) */
+export function backdateDays() {
+  const n = Number(session.settings && session.settings.check_backdate_days);
+  return Number.isFinite(n) && n >= 0 ? Math.min(31, Math.floor(n)) : 7;
+}
+/** Số ngày xem lại bỏ sót / ngày chưa xác nhận: không quá số ngày lượt kiểm còn trên máy (xa hơn máy không có lượt kiểm → báo bỏ sót sai) */
+function lookbackDays() {
+  const n = Math.max(1, Math.min(31, Number(session.settings && session.settings.missed_lookback_days) || 7));
+  return Math.min(n, syncDays() - 1);
 }
 
 /* ---------------- Mẫu, gán máy ---------------- */
@@ -217,7 +228,7 @@ export async function weekSummary(from, days = 7) {
     for (const a of asgs) {
       if (a.start_date && d < a.start_date) continue;
       const t = tpls.get(a.template_id);
-      for (const s of t.frequency === 'SHIFT' ? String(t.shifts || '').split(',').filter(Boolean) : ['']) {
+      for (const s of t.frequency === 'SHIFT' ? tplShifts(t, sh) : ['']) {
         const k = a.assignment_id + '|' + periodKey(t.frequency, d, s);
         x.due++;
         const r = runIdx.get(k);
@@ -250,7 +261,7 @@ export async function openAbnormals() {
  * Trả [{asg, tpl, mac, period_key, work_date, shift}]
  */
 export async function missedPeriods() {
-  const days = Math.max(1, Math.min(31, Number(session.settings && session.settings.missed_lookback_days) || 7));
+  const days = lookbackDays();
   const sh = shifts();
   const now = nowMs();
   const [tpls, macs, runIdx] = [await mapOf('TEMPLATE'), await mapOf('MACHINE'), await runIndex()];
@@ -273,7 +284,7 @@ export async function missedPeriods() {
 
 /** Ngày có lượt kiểm trong khu vực phụ trách mà chưa xác nhận (missed_lookback_days ngày gần nhất, cả hôm nay) */
 export async function unconfirmedDays() {
-  const days = Math.max(1, Math.min(31, Number(session.settings && session.settings.missed_lookback_days) || 7));
+  const days = lookbackDays();
   const from = addDaysIso(today(), -days);
   const macs = await mapOf('MACHINE');
   const confirms = await recs('DAY_CONFIRM');

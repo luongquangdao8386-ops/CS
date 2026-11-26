@@ -4,7 +4,7 @@ import { bi, biText, esc, api, resMsg, fmtDate, fmtDateTime, nameText } from '..
 import { ICON, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, today, nowMs, shifts, localFrom, weekday, inMyAreas, users, userName } from '../data.js';
-import { monthPeriods, periodSpan, fmtNumVi, stdText, stdBounds, numOrNull, effItem, offSkip } from '../judge.js';
+import { monthPeriods, periodSpan, fmtNumVi, stdText, stdBounds, numOrNull, effItem, offSkip, tplShifts } from '../judge.js';
 import { stateBadge } from './today.js';
 
 const state = { m: '', ym: '', t: '', shift: '', item: '', day: '' };
@@ -23,7 +23,9 @@ export function ymLabel(ym) { return `${ym.slice(5, 7)}/${ym.slice(0, 4)}`; }
  */
 export async function monthData(machineId, ym) {
   const first = ym + '-01';
-  const local = first >= localFrom() || ym === ymOf(today());
+  // Tháng có ngày cũ hơn số ngày lượt kiểm giữ trên máy (runs_sync_days < 31): hỏi máy chủ, kẻo ngày đầu tháng thành "bỏ sót";
+  // mất mạng thì tháng đang chạy vẫn xem phần còn trên máy
+  const local = first >= localFrom() || (ym === ymOf(today()) && !navigator.onLine);
   if (!local) {
     if (!navigator.onLine) return { ok: false, code: 'NETWORK_ERROR' };
     const r = await api('check.month', { machine_id: machineId, ym }, { retry: true });
@@ -51,12 +53,12 @@ export async function monthData(machineId, ym) {
 }
 
 /** Trạng thái ô của một kỳ: FAIL · WARN · DONE · PARTIAL · MISSED (bỏ sót) · REASON (bỏ sót có lý do) · '' (chưa tới/chưa gán)
- * — cùng quy tắc với bảng của PDF (25_report.js): bỏ sót khi kỳ đã hết, gán còn hiệu lực và kỳ không trước ngày gán */
-function cellState(run, missedRec, span, asg, per) {
+ * — cùng quy tắc với bảng của PDF (25_report.js): bỏ sót khi kỳ đã hết, gán mẫu, mẫu và máy còn dùng, kỳ không trước ngày gán */
+function cellState(run, missedRec, span, asg, per, tpl, mac) {
   if (run) return run.status === 'PARTIAL' ? 'PARTIAL' : run.fail_count ? 'FAIL' : run.warn_count ? 'WARN' : 'DONE';
   if (missedRec) return 'REASON';
   if (span.end > nowMs()) return '';
-  if (!asg || !asg.active || (asg.start_date && per.last < asg.start_date)) return '';
+  if (!asg || !asg.active || !tpl || !tpl.active || !mac || !mac.active || (asg.start_date && per.last < asg.start_date)) return '';
   return 'MISSED';
 }
 
@@ -72,8 +74,8 @@ export function monthModel(d, ym, { templateId = '', shift = '' } = {}) {
     const asg = asgByTpl.get(tpl.template_id) || null;
     const tRuns = d.runs.filter((r) => r.template_id === tpl.template_id);
     if (!asg && !tRuns.length) continue;
-    const shiftList = tpl.frequency === 'SHIFT' ? String(tpl.shifts || '').split(',').filter(Boolean) : [''];
-    // Ca có lượt kiểm mà mẫu đã bỏ ca đó: vẫn hiện
+    const shiftList = tpl.frequency === 'SHIFT' ? tplShifts(tpl, sh) : [''];
+    // Ca có lượt kiểm mà mẫu (hoặc giờ ca) đã bỏ ca đó: vẫn hiện
     tRuns.forEach((r) => { if (tpl.frequency === 'SHIFT' && r.shift && !shiftList.includes(String(r.shift))) shiftList.push(String(r.shift)); });
     for (const s of shiftList) {
       if (shift && tpl.frequency === 'SHIFT' && s !== shift) continue;
@@ -83,7 +85,7 @@ export function monthModel(d, ym, { templateId = '', shift = '' } = {}) {
         const run = runByKey.get(p.key) || null;
         const missed = missByKey.get(p.key) || null;
         const span = periodSpan(tpl.frequency, p, s, sh);
-        return { ...p, shift: s, run, missed, state: cellState(run, missed, span, asg, p) };
+        return { ...p, shift: s, run, missed, state: cellState(run, missed, span, asg, p, tpl, d.machine) };
       });
       // Dòng: hạng mục phiên bản hiện tại, thêm hạng mục chỉ có trong lượt cũ
       const rows = [];

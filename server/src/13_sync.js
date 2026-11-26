@@ -20,6 +20,26 @@ function syncFromDate_() {
   return addDaysIso_(todayVN_(), -Math.max(7, Number(setting_('runs_sync_days') || 40)));
 }
 
+/** Bảng có cửa sổ ngày (lượt kiểm…) lớn hơn số dòng này thì không đọc cả bảng khi đồng bộ (lượt kiểm ~6 KB/dòng, quá đệm) */
+var SYNC_BIG_ROWS_ = 200;
+
+/**
+ * Các dòng của một loại hồ sơ để đồng bộ. cursor null (bootstrap): bảng có cửa sổ chỉ đọc dòng trong cửa sổ ngày;
+ * cursor số (changes): chỉ đọc dòng có sync_revision > cursor. Bảng nhỏ hoặc không có cửa sổ: đọc cả bảng qua đệm.
+ * Lọc trước theo vài cột rồi mới đọc trọn dòng → thời gian đồng bộ không tăng theo số lượt kiểm tích lũy.
+ */
+function syncRows_(ent, aux, cursor) {
+  if (!ent.window || sh_(ent.sheet).getLastRow() - 1 <= SYNC_BIG_ROWS_) return aux.tc.rows(ent.sheet);
+  if (cursor !== null && cursor !== undefined) {
+    return readRowsWhere_(ent.sheet, ['sync_revision'], function (r) { return Number(r.sync_revision || 0) > cursor; });
+  }
+  if (!aux.from) aux.from = syncFromDate_();
+  var from = aux.from;
+  if (ent.type === 'DOCUMENT') return readRowsWhere_(ent.sheet, ['created_at', 'active'], function (r) { return r.active && String(r.created_at).slice(0, 10) >= from; });
+  if (ent.type === 'ABNORMAL') return readRowsWhere_(ent.sheet, ['work_date', 'status'], function (r) { return r.status === 'OPEN' || String(r.work_date) >= from; });
+  return readRowsWhere_(ent.sheet, ['work_date'], function (r) { return String(r.work_date) >= from; });
+}
+
 /** Dòng → bản ghi gửi client; null nếu không gửi (ngoài cửa sổ, phiên bản mẫu cũ, đã gỡ) */
 function syncProject_(ctx, ent, row, aux) {
   if (ent.currentRev) {
@@ -56,7 +76,7 @@ function syncBootstrap_(ctx) {
   for (; ei < ents.length; ei++) {
     var ent = ents[ei];
     if (count && Date.now() - t0 > budget) { next = ei + ':0'; break; }
-    var rows = tc.rows(ent.sheet);
+    var rows = syncRows_(ent, aux, null);
     var list = records[ent.type] = records[ent.type] || [];
     for (var i = off; i < rows.length; i++) {
       if (count >= pageSize || Date.now() - t0 > budget) { next = ei + ':' + i; break; }
@@ -110,7 +130,7 @@ function syncChanges_(ctx) {
   var aux = { tc: tc };
   ents.forEach(function (ent) {
     var key = sheetSchema_(ent.sheet).key;
-    tc.rows(ent.sheet).forEach(function (r) {
+    syncRows_(ent, aux, cursor).forEach(function (r) {
       if (!(Number(r.sync_revision || 0) > cursor)) return;
       var o = r.archived_at ? null : syncProject_(ctx, ent, r, aux);
       // Hạng mục của phiên bản mẫu cũ không gửi xóa (app chỉ dùng phiên bản hiện tại của mẫu)

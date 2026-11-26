@@ -180,6 +180,12 @@ export function shiftsFrom(settings) {
   return (shiftsOk(s) ? s : DEFAULT_SHIFTS).slice().sort((a, b) => Number(a.no) - Number(b.no));
 }
 
+/** Ca của mẫu theo ca còn trong giờ ca đang cài — như tplShifts_ của máy chủ */
+export function tplShifts(tpl, shifts) {
+  const have = new Set((shifts || []).map((s) => String(s.no)));
+  return String((tpl && tpl.shifts) || '').split(',').map((x) => x.trim()).filter((x, i, a) => x && have.has(x) && a.indexOf(x) === i);
+}
+
 export function addDaysIso(iso, n) {
   const d = new Date(iso + 'T00:00:00Z');
   d.setUTCDate(d.getUTCDate() + n);
@@ -269,7 +275,7 @@ export function periodSpan(freq, per, shift, shifts) {
 export function currentPeriod(tpl, now, shifts) {
   const at = shiftAt(now, shifts);
   if (tpl.frequency === 'SHIFT') {
-    const allowed = String(tpl.shifts || '').split(',').filter(Boolean);
+    const allowed = tplShifts(tpl, shifts);
     if (!at.shift || !allowed.includes(at.shift)) return null;
     return { period_key: periodKey('SHIFT', at.work_date, at.shift), work_date: at.work_date, shift: at.shift };
   }
@@ -284,7 +290,7 @@ export function endedPeriods(tpl, nowMs, days, shifts, startDate = '') {
   for (let i = days; i >= 0; i--) {
     const d = addDaysIso(today, -i);
     if (startDate && d < startDate) continue;
-    const list = tpl.frequency === 'SHIFT' ? String(tpl.shifts || '').split(',').filter(Boolean) : [''];
+    const list = tpl.frequency === 'SHIFT' ? tplShifts(tpl, shifts) : [''];
     for (const sh of list) {
       const key = periodKey(tpl.frequency, d, sh);
       if (seen.has(key)) continue;
