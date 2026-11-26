@@ -40,7 +40,8 @@ function noteColdStart(ms, timedOut) {
 /** Đích đến tạm khi mở link mà chưa đăng nhập */
 function rememberTarget() {
   const h = location.hash || '';
-  if (/^#\/(m|check|month)\//.test(h)) ss.set('pending_route', h);
+  // Cả link tem QR M&E (#/r/<mã>) mở bằng Camera khi chưa đăng nhập: đăng nhập xong vào thẳng máy đó
+  if (/^#\/(m|check|month|r)\//.test(h)) ss.set('pending_route', h);
 }
 function takeTarget() {
   const h = ss.get('pending_route');
