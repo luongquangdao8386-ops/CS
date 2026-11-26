@@ -116,3 +116,19 @@ function permissionSummary_(ctx) {
 function userAreas_(u) {
   return areaList_(u && u.area_ids);
 }
+
+/** Khu vực có thuộc phạm vi phụ trách của người dùng không (người không gán khu vực: mọi khu vực) */
+function areaAllowed_(u, areaId) {
+  var mine = userAreas_(u);
+  return !mine.length || mine.indexOf(String(areaId || '')) >= 0;
+}
+
+/** Ghi trên máy ngoài khu vực phụ trách → AREA_FORBIDDEN (app chỉ hiện máy khu vực mình; máy chủ chặn cả khi gửi thẳng) */
+function assertMachineArea_(ctx, mac) {
+  if (!areaAllowed_(ctx.user, mac && mac.area_id)) throw validationError_([fieldError_('machine_id', 'AREA_FORBIDDEN')]);
+}
+
+/** Đọc dữ liệu một máy ngoài khu vực phụ trách (Bảng tháng, PDF) → FORBIDDEN */
+function assertMachineAreaRead_(ctx, mac) {
+  if (!areaAllowed_(ctx.user, mac && mac.area_id)) throw apiError_('FORBIDDEN');
+}

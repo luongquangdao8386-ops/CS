@@ -72,6 +72,7 @@ var SUB_MSG = {
   RUN_LOCKED: ['Ngày này trưởng bộ phận đã xác nhận, không sửa được', '该日已由部门主管确认，不能修改'],
   NOT_ASSIGNED: ['Máy chưa được gán mẫu này hoặc đã ngừng', '设备未分配该模板或已停用'],
   MACHINE_INACTIVE: ['Máy đã ngừng dùng', '设备已停用'],
+  AREA_FORBIDDEN: ['Máy này không thuộc khu vực bạn phụ trách', '该设备不属于您负责的区域'],
   TEMPLATE_INACTIVE: ['Mẫu đã ngừng dùng', '模板已停用'],
   REVISION_UNKNOWN: ['Không có phiên bản mẫu này', '不存在该模板版本'],
   ASSIGNMENT_EXISTS: ['Máy đã được gán mẫu này', '设备已分配该模板'],

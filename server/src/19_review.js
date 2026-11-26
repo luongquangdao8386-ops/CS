@@ -5,6 +5,7 @@ function abnormalResolve_(ctx) {
   var p = ctx.req.payload || {};
   var cur = isUuidV4_(p.abnormal_id) ? findOne_('Abnormals', 'abnormal_id', p.abnormal_id) : null;
   if (!cur) throw apiError_('NOT_FOUND');
+  assertMachineArea_(ctx, findOne_('Machines', 'machine_id', cur.machine_id));
   var errs = [];
   requireOneLang_(errs, p, null, 'resolution');
   if (errs.length) throw validationError_(errs);
@@ -35,6 +36,7 @@ function missedReason_(ctx) {
   var asg = findOne_('Assignments', 'assignment_id', cur ? cur.assignment_id : p.assignment_id);
   var tpl = asg ? findOne_('Templates', 'template_id', asg.template_id) : null;
   if (!asg || !tpl) throw validationError_([fieldError_('assignment_id', 'NOT_ASSIGNED')]);
+  assertMachineArea_(ctx, findOne_('Machines', 'machine_id', asg.machine_id));
   var wd = cur ? cur.work_date : trimStr_(p.work_date);
   var shift = cur ? String(cur.shift || '') : (tpl.frequency === 'SHIFT' ? trimStr_(p.shift) : '');
   var errs = [];

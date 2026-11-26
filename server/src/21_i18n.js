@@ -118,6 +118,8 @@ function runBackgroundJobs() {
   if (prop_('MAINTENANCE_MODE') === 'true') return;
   var t0 = Date.now();
   dbReset_();
+  // Dọn phiên, nhật ký đăng nhập, thao tác cũ (tối đa 1 lần/ngày); lỗi không chặn dịch bù
+  try { cleanupOld_(false); } catch (e) { console.warn('cleanupOld_ ' + (e && e.message || e)); }
   if (!mtEnabled_()) { recordTriggerRun_('runBackgroundJobs', t0); return; }
   var done = 0;
   Object.keys(MT_SHEETS_).forEach(function (sheet) {

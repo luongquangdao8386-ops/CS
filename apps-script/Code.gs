@@ -1070,6 +1070,7 @@ var SUB_MSG = {
   RUN_LOCKED: ['Ngày này trưởng bộ phận đã xác nhận, không sửa được', '该日已由部门主管确认，不能修改'],
   NOT_ASSIGNED: ['Máy chưa được gán mẫu này hoặc đã ngừng', '设备未分配该模板或已停用'],
   MACHINE_INACTIVE: ['Máy đã ngừng dùng', '设备已停用'],
+  AREA_FORBIDDEN: ['Máy này không thuộc khu vực bạn phụ trách', '该设备不属于您负责的区域'],
   TEMPLATE_INACTIVE: ['Mẫu đã ngừng dùng', '模板已停用'],
   REVISION_UNKNOWN: ['Không có phiên bản mẫu này', '不存在该模板版本'],
   ASSIGNMENT_EXISTS: ['Máy đã được gán mẫu này', '设备已分配该模板'],
@@ -1879,6 +1880,22 @@ function userAreas_(u) {
   return areaList_(u && u.area_ids);
 }
 
+/** Khu vực có thuộc phạm vi phụ trách của người dùng không (người không gán khu vực: mọi khu vực) */
+function areaAllowed_(u, areaId) {
+  var mine = userAreas_(u);
+  return !mine.length || mine.indexOf(String(areaId || '')) >= 0;
+}
+
+/** Ghi trên máy ngoài khu vực phụ trách → AREA_FORBIDDEN (app chỉ hiện máy khu vực mình; máy chủ chặn cả khi gửi thẳng) */
+function assertMachineArea_(ctx, mac) {
+  if (!areaAllowed_(ctx.user, mac && mac.area_id)) throw validationError_([fieldError_('machine_id', 'AREA_FORBIDDEN')]);
+}
+
+/** Đọc dữ liệu một máy ngoài khu vực phụ trách (Bảng tháng, PDF) → FORBIDDEN */
+function assertMachineAreaRead_(ctx, mac) {
+  if (!areaAllowed_(ctx.user, mac && mac.area_id)) throw apiError_('FORBIDDEN');
+}
+
 // ===== 08_ops.js =====
 /* 08_ops: Operations (chống ghi trùng), mã hiển thị, AuditLogs, dịch máy (lấy từ M&E) */
 
@@ -2543,6 +2560,7 @@ function diffRows_(sheet, key, incoming, fields, counts) {
     row.updated_at = nowIso; row.updated_by = SYSTEM_USER;
     writes.push({ sheet: sheet, mode: 'update', row: row });
     if (old.active && !n.active) counts.deactivated++; else counts.updated++;
+    if (n.area_id !== undefined && String(old.area_id || '') !== String(n.area_id || '')) counts.moved = (counts.moved || 0) + 1;
   });
   Object.keys(cur).forEach(function (id) {
     var old = cur[id];
@@ -2586,7 +2604,11 @@ function syncMachines_(force, link) {
       .concat(diffRows_('Machines', 'machine_id', machines,
         ['machine_code', 'name_vi', 'name_zh', 'area_id', 'me_status', 'category_vi', 'category_zh', 'model', 'qr_key', 'active', 'source'], cm));
   });
-  if (writes.length) systemWrite_(writes, { action: 'machine.sync', entity_type: 'MACHINE', after_json: { areas: ca, machines: cm, rev: data.rev } });
+  if (writes.length) {
+    var rev = systemWrite_(writes, { action: 'machine.sync', entity_type: 'MACHINE', after_json: { areas: ca, machines: cm, rev: data.rev } });
+    // Máy đổi khu vực: app mọi máy tải lại toàn bộ (như khi đổi cài đặt) — người khu vực mới nhận cả gán mẫu, lượt kiểm của máy đó
+    if (cm.moved) withWriteLock_(function () { var st = readState_(); stateWrite_(st, { settings_rev: ['INT', rev] }, SYSTEM_USER); });
+  }
   noteMeSync_('OK', '', data.rev);
   return { unchanged: false, rev: data.rev, areas: ca, machines: cm, total_machines: machines.length };
 }
@@ -2875,6 +2897,7 @@ function docUpload_(ctx) {
   if (!entity || entity.archived_at) throw validationError_([fieldError_('entity_id', 'NOT_FOUND')]);
   var owner = entity.checked_by || entity.reported_by;
   if (owner !== ctx.user.user_id && Number(ctx.user.role_level) < 3) throw apiError_('FORBIDDEN');
+  if (owner !== ctx.user.user_id) assertMachineArea_(ctx, findOne_('Machines', 'machine_id', entity.machine_id));
 
   // Đã có thao tác này → không tạo thêm file
   var ex = findOne_('Operations', 'operation_id', ctx.req.operation_id);
@@ -2982,7 +3005,30 @@ function syncRows_(ent, aux, cursor) {
   return readRowsWhere_(ent.sheet, ['work_date'], function (r) { return String(r.work_date) >= from; });
 }
 
-/** Dòng → bản ghi gửi client; null nếu không gửi (ngoài cửa sổ, phiên bản mẫu cũ, đã gỡ) */
+/**
+ * Người có khu vực phụ trách chỉ nhận máy, gán mẫu, lượt kiểm, bất thường, lý do bỏ sót, xác nhận ngày, ảnh của máy thuộc khu vực mình.
+ * Khu vực, thư viện hạng mục, mẫu: gửi đủ. Người không gán khu vực: gửi tất cả.
+ */
+function syncInScope_(ent, row, aux) {
+  if (!aux.scope || !aux.scope.length) return true;
+  var inArea = function (a) { return aux.scope.indexOf(String(a || '')) >= 0; };
+  var macArea = function (mid) {
+    if (!aux.macArea) { aux.macArea = {}; aux.tc.rows('Machines').forEach(function (m) { aux.macArea[m.machine_id] = m.area_id; }); }
+    return aux.macArea[mid];
+  };
+  switch (ent.type) {
+    case 'MACHINE': return inArea(row.area_id);
+    case 'ASSIGNMENT': case 'RUN': case 'ABNORMAL': case 'MISSED': return inArea(macArea(row.machine_id));
+    case 'DAY_CONFIRM': return row.area_id === '*' || inArea(row.area_id);
+    case 'DOCUMENT': {
+      if (!aux.runMac) { aux.runMac = {}; readCols_('Runs', ['machine_id']).forEach(function (r) { aux.runMac[r.run_id] = r.machine_id; }); }
+      return inArea(macArea(aux.runMac[row.parent_run_id]));
+    }
+    default: return true;
+  }
+}
+
+/** Dòng → bản ghi gửi client; null nếu không gửi (ngoài cửa sổ, phiên bản mẫu cũ, đã gỡ, ngoài khu vực phụ trách) */
 function syncProject_(ctx, ent, row, aux) {
   if (ent.currentRev) {
     if (!aux.tplRev) { aux.tplRev = {}; (aux.tc ? aux.tc.rows('Templates') : readRows_('Templates')).forEach(function (t) { aux.tplRev[t.template_id] = Number(t.revision); }); }
@@ -2997,6 +3043,7 @@ function syncProject_(ctx, ent, row, aux) {
       if (row.status !== 'OPEN' && String(row.work_date) < aux.from) return null;
     } else if (String(row.work_date) < aux.from) return null;
   }
+  if (!syncInScope_(ent, row, aux)) return null;
   return ent.type === 'DOCUMENT' ? projectDoc_(ctx, row) : projectRow_(ctx, row);
 }
 
@@ -3009,7 +3056,7 @@ function syncBootstrap_(ctx) {
   var cursor = p.page_token && p.sync_cursor ? Number(p.sync_cursor) : Number(stateGet_(st, 'sync_revision', 0));
   var ents = SYNC_ENTITIES_;
   var tc = tableCache_(ents.slice(ei).map(function (e) { return e.sheet; }).concat(['Templates']), st);
-  var aux = { tc: tc };
+  var aux = { tc: tc, scope: userAreas_(ctx.user) };
   var records = {};
   var count = 0;
   var next = null;
@@ -3069,7 +3116,7 @@ function syncChanges_(ctx) {
   var changes = [];
   var ents = SYNC_ENTITIES_.filter(function (ent) { return Number(stateGet_(st, 'table_rev.' + ent.sheet, 0)) > cursor; });
   var tc = ents.length ? tableCache_(ents.map(function (e) { return e.sheet; }).concat(['Templates']), st) : null;
-  var aux = { tc: tc };
+  var aux = { tc: tc, scope: userAreas_(ctx.user) };
   ents.forEach(function (ent) {
     var key = sheetSchema_(ent.sheet).key;
     syncRows_(ent, aux, cursor).forEach(function (r) {
@@ -3623,6 +3670,7 @@ function assignmentEdit_(ctx) {
   if (!tpl) errs.push(fieldError_('template_id', 'NOT_FOUND'));
   if (!mac) errs.push(fieldError_('machine_id', 'NOT_FOUND'));
   if (errs.length) throw validationError_(errs);
+  assertMachineArea_(ctx, mac);
   var items = templateItems_(templateId, tpl.revision);
   var ov = p.overrides !== undefined ? normOverrides_(p.overrides, items, errs) : (cur ? cur.overrides_json : null);
   if (errs.length) throw validationError_(errs);
@@ -3672,7 +3720,7 @@ function assignmentAdd_(ctx) {
       var writes = [], added = 0, skipped = 0, reactivated = 0;
       ids.forEach(function (mid) {
         var m = macs[mid];
-        if (!m || !m.active) { skipped++; return; }
+        if (!m || !m.active || !areaAllowed_(ctx.user, m.area_id)) { skipped++; return; }
         var ex = mine.filter(function (a) { return a.machine_id === mid; });
         if (ex.some(function (a) { return a.active; })) { skipped++; return; }
         if (ex.length) {
@@ -4078,6 +4126,8 @@ function checkSubmit_(ctx) {
   var tpl = findOne_('Templates', 'template_id', asg.template_id);
   var mac = findOne_('Machines', 'machine_id', asg.machine_id);
   if (!tpl || !mac) throw validationError_([fieldError_('assignment_id', 'NOT_ASSIGNED')]);
+  // Khu vực phụ trách: lượt mới, hoặc sửa lượt của người khác (Trưởng bộ phận); tự sửa lượt của mình thì được dù máy đã chuyển khu vực
+  if (!cur || cur.checked_by !== ctx.user.user_id) assertMachineArea_(ctx, mac);
   if (!cur) {
     if (!asg.active || asg.archived_at) throw validationError_([fieldError_('assignment_id', 'NOT_ASSIGNED')]);
     if (!mac.active) throw validationError_([fieldError_('machine_id', 'MACHINE_INACTIVE')]);
@@ -4201,6 +4251,7 @@ function monthData_(machineId, ym) {
 function checkMonth_(ctx) {
   var p = ctx.req.payload || {};
   var md = monthData_(p.machine_id, trimStr_(p.ym));
+  assertMachineAreaRead_(ctx, md.machine);
   var pr = function (list) { return list.map(function (r) { return projectRow_(ctx, r); }); };
   return {
     machine: projectRow_(ctx, md.machine), area: md.area ? projectRow_(ctx, md.area) : null, ym: md.ym, runs: pr(md.runs), abnormals: pr(md.abnormals),
@@ -4216,6 +4267,7 @@ function abnormalResolve_(ctx) {
   var p = ctx.req.payload || {};
   var cur = isUuidV4_(p.abnormal_id) ? findOne_('Abnormals', 'abnormal_id', p.abnormal_id) : null;
   if (!cur) throw apiError_('NOT_FOUND');
+  assertMachineArea_(ctx, findOne_('Machines', 'machine_id', cur.machine_id));
   var errs = [];
   requireOneLang_(errs, p, null, 'resolution');
   if (errs.length) throw validationError_(errs);
@@ -4246,6 +4298,7 @@ function missedReason_(ctx) {
   var asg = findOne_('Assignments', 'assignment_id', cur ? cur.assignment_id : p.assignment_id);
   var tpl = asg ? findOne_('Templates', 'template_id', asg.template_id) : null;
   if (!asg || !tpl) throw validationError_([fieldError_('assignment_id', 'NOT_ASSIGNED')]);
+  assertMachineArea_(ctx, findOne_('Machines', 'machine_id', asg.machine_id));
   var wd = cur ? cur.work_date : trimStr_(p.work_date);
   var shift = cur ? String(cur.shift || '') : (tpl.frequency === 'SHIFT' ? trimStr_(p.shift) : '');
   var errs = [];
@@ -4694,6 +4747,8 @@ function runBackgroundJobs() {
   if (prop_('MAINTENANCE_MODE') === 'true') return;
   var t0 = Date.now();
   dbReset_();
+  // Dọn phiên, nhật ký đăng nhập, thao tác cũ (tối đa 1 lần/ngày); lỗi không chặn dịch bù
+  try { cleanupOld_(false); } catch (e) { console.warn('cleanupOld_ ' + (e && e.message || e)); }
   if (!mtEnabled_()) { recordTriggerRun_('runBackgroundJobs', t0); return; }
   var done = 0;
   Object.keys(MT_SHEETS_).forEach(function (sheet) {
@@ -5710,6 +5765,7 @@ function pdfGrid_(pd, g) {
 function reportPdfAction_(ctx) {
   var p = ctx.req.payload || {};
   var md = monthData_(p.machine_id, trimStr_(p.ym));
+  assertMachineAreaRead_(ctx, md.machine);
   var tpls = md.templates.filter(function (t) { return !p.template_id || t.template_id === p.template_id; });
   if (!tpls.length) throw validationError_([fieldError_('template_id', 'NOT_ASSIGNED')]);
   var code = withWriteLock_(function () {
@@ -6878,6 +6934,59 @@ function templatePurge_(ctx) {
     res.data.files_trashed = n;
   }
   return res;
+}
+
+// ===== 30_cleanup.js =====
+/* 30_cleanup: dọn dữ liệu kỹ thuật cũ để bảng tính không phình mãi (chạy trong runBackgroundJobs, tối đa 1 lần/ngày).
+ * - Sessions: phiên đã hết hạn hoặc bị thu hồi quá 30 ngày (phiên còn hiệu lực không đụng).
+ * - AuthAttempts: lần đăng nhập cũ hơn auth_attempts_retention_days (Cấu hình, mặc định 90 ngày).
+ * - Operations: thao tác đã ghi xong (COMMITTED) quá 90 ngày — chỉ dùng để chống ghi trùng khi app gửi lại; thao tác chưa xong giữ nguyên.
+ * Không xóa AuditLogs (nhật ký thao tác là hồ sơ) và không xóa dữ liệu nghiệp vụ. Xóa dưới khóa ghi, mỗi bảng tối đa CLEANUP_MAX_ROWS_ dòng/lần. */
+
+var CLEANUP_SESSION_DAYS_ = 30;
+var CLEANUP_OPS_DAYS_ = 90;
+var CLEANUP_MAX_ROWS_ = 20000;
+var CLEANUP_EVERY_MS_ = 20 * 3600000;
+
+/** Dọn; force = chạy ngay (bỏ qua mốc 1 lần/ngày). Trả số dòng đã xóa mỗi bảng hoặc null khi chưa tới lượt */
+function cleanupOld_(force) {
+  var nowMs = now_().getTime();
+  var day = 86400000;
+  var ms = function (v) { var t = parseTime_(v); return t ? t.getTime() : 0; };
+  var ids = function (name, cols, pred) {
+    var key = sheetSchema_(name).key;
+    return readCols_(name, cols).filter(pred).slice(0, CLEANUP_MAX_ROWS_).map(function (r) { return r[key]; });
+  };
+  return withWriteLock_(function () {
+    var st = readState_();
+    var last = ms(stateGet_(st, 'last_cleanup_at', ''));
+    if (!force && last && nowMs - last < CLEANUP_EVERY_MS_) return null;
+    var sCut = nowMs - CLEANUP_SESSION_DAYS_ * day;
+    var aCut = nowMs - Math.max(7, Number(setting_('auth_attempts_retention_days') || 90)) * day;
+    var oCut = nowMs - CLEANUP_OPS_DAYS_ * day;
+    var out = {
+      sessions: deleteWhere_('Sessions', 'session_id', ids('Sessions', ['expires_at', 'revoked_at'], function (r) {
+        var e = ms(r.expires_at), v = ms(r.revoked_at);
+        return (v && v < sCut) || (e && e < sCut);
+      })),
+      auth_attempts: deleteWhere_('AuthAttempts', 'attempt_id', ids('AuthAttempts', ['occurred_at'], function (r) {
+        var t = ms(r.occurred_at);
+        return t && t < aCut;
+      })),
+      operations: deleteWhere_('Operations', 'operation_id', ids('Operations', ['state', 'received_at'], function (r) {
+        var t = ms(r.received_at);
+        return r.state === 'COMMITTED' && t && t < oCut;
+      }))
+    };
+    stateWrite_(st, { last_cleanup_at: ['DATETIME', isoVN_(now_())], last_cleanup_counts: ['STRING', JSON.stringify(out)] }, SYSTEM_USER);
+    return out;
+  });
+}
+
+/** Chạy tay từ trình soạn: dọn ngay và in số dòng đã xóa */
+function adminCleanupNow() {
+  dbReset_();
+  log_('Đã dọn dữ liệu cũ: ' + JSON.stringify(cleanupOld_(true)));
 }
 
 // ===== i18n/labels.json =====

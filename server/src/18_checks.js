@@ -89,6 +89,8 @@ function checkSubmit_(ctx) {
   var tpl = findOne_('Templates', 'template_id', asg.template_id);
   var mac = findOne_('Machines', 'machine_id', asg.machine_id);
   if (!tpl || !mac) throw validationError_([fieldError_('assignment_id', 'NOT_ASSIGNED')]);
+  // Khu vực phụ trách: lượt mới, hoặc sửa lượt của người khác (Trưởng bộ phận); tự sửa lượt của mình thì được dù máy đã chuyển khu vực
+  if (!cur || cur.checked_by !== ctx.user.user_id) assertMachineArea_(ctx, mac);
   if (!cur) {
     if (!asg.active || asg.archived_at) throw validationError_([fieldError_('assignment_id', 'NOT_ASSIGNED')]);
     if (!mac.active) throw validationError_([fieldError_('machine_id', 'MACHINE_INACTIVE')]);
@@ -212,6 +214,7 @@ function monthData_(machineId, ym) {
 function checkMonth_(ctx) {
   var p = ctx.req.payload || {};
   var md = monthData_(p.machine_id, trimStr_(p.ym));
+  assertMachineAreaRead_(ctx, md.machine);
   var pr = function (list) { return list.map(function (r) { return projectRow_(ctx, r); }); };
   return {
     machine: projectRow_(ctx, md.machine), area: md.area ? projectRow_(ctx, md.area) : null, ym: md.ym, runs: pr(md.runs), abnormals: pr(md.abnormals),

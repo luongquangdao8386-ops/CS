@@ -40,7 +40,30 @@ function syncRows_(ent, aux, cursor) {
   return readRowsWhere_(ent.sheet, ['work_date'], function (r) { return String(r.work_date) >= from; });
 }
 
-/** Dòng → bản ghi gửi client; null nếu không gửi (ngoài cửa sổ, phiên bản mẫu cũ, đã gỡ) */
+/**
+ * Người có khu vực phụ trách chỉ nhận máy, gán mẫu, lượt kiểm, bất thường, lý do bỏ sót, xác nhận ngày, ảnh của máy thuộc khu vực mình.
+ * Khu vực, thư viện hạng mục, mẫu: gửi đủ. Người không gán khu vực: gửi tất cả.
+ */
+function syncInScope_(ent, row, aux) {
+  if (!aux.scope || !aux.scope.length) return true;
+  var inArea = function (a) { return aux.scope.indexOf(String(a || '')) >= 0; };
+  var macArea = function (mid) {
+    if (!aux.macArea) { aux.macArea = {}; aux.tc.rows('Machines').forEach(function (m) { aux.macArea[m.machine_id] = m.area_id; }); }
+    return aux.macArea[mid];
+  };
+  switch (ent.type) {
+    case 'MACHINE': return inArea(row.area_id);
+    case 'ASSIGNMENT': case 'RUN': case 'ABNORMAL': case 'MISSED': return inArea(macArea(row.machine_id));
+    case 'DAY_CONFIRM': return row.area_id === '*' || inArea(row.area_id);
+    case 'DOCUMENT': {
+      if (!aux.runMac) { aux.runMac = {}; readCols_('Runs', ['machine_id']).forEach(function (r) { aux.runMac[r.run_id] = r.machine_id; }); }
+      return inArea(macArea(aux.runMac[row.parent_run_id]));
+    }
+    default: return true;
+  }
+}
+
+/** Dòng → bản ghi gửi client; null nếu không gửi (ngoài cửa sổ, phiên bản mẫu cũ, đã gỡ, ngoài khu vực phụ trách) */
 function syncProject_(ctx, ent, row, aux) {
   if (ent.currentRev) {
     if (!aux.tplRev) { aux.tplRev = {}; (aux.tc ? aux.tc.rows('Templates') : readRows_('Templates')).forEach(function (t) { aux.tplRev[t.template_id] = Number(t.revision); }); }
@@ -55,6 +78,7 @@ function syncProject_(ctx, ent, row, aux) {
       if (row.status !== 'OPEN' && String(row.work_date) < aux.from) return null;
     } else if (String(row.work_date) < aux.from) return null;
   }
+  if (!syncInScope_(ent, row, aux)) return null;
   return ent.type === 'DOCUMENT' ? projectDoc_(ctx, row) : projectRow_(ctx, row);
 }
 
@@ -67,7 +91,7 @@ function syncBootstrap_(ctx) {
   var cursor = p.page_token && p.sync_cursor ? Number(p.sync_cursor) : Number(stateGet_(st, 'sync_revision', 0));
   var ents = SYNC_ENTITIES_;
   var tc = tableCache_(ents.slice(ei).map(function (e) { return e.sheet; }).concat(['Templates']), st);
-  var aux = { tc: tc };
+  var aux = { tc: tc, scope: userAreas_(ctx.user) };
   var records = {};
   var count = 0;
   var next = null;
@@ -127,7 +151,7 @@ function syncChanges_(ctx) {
   var changes = [];
   var ents = SYNC_ENTITIES_.filter(function (ent) { return Number(stateGet_(st, 'table_rev.' + ent.sheet, 0)) > cursor; });
   var tc = ents.length ? tableCache_(ents.map(function (e) { return e.sheet; }).concat(['Templates']), st) : null;
-  var aux = { tc: tc };
+  var aux = { tc: tc, scope: userAreas_(ctx.user) };
   ents.forEach(function (ent) {
     var key = sheetSchema_(ent.sheet).key;
     syncRows_(ent, aux, cursor).forEach(function (r) {

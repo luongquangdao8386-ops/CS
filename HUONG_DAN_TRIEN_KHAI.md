@@ -259,6 +259,12 @@ Không thêm màn mới; sửa các lỗi tìm được khi rà soát cả app:
 | Số ngày **ghi bù** | App luôn cho 7 ngày dù Cấu hình `check_backdate_days` khác → phiếu bị từ chối hoặc không ghi bù được | App theo đúng Cấu hình |
 | **Đổi kỳ** | Chọn được kỳ chưa bắt đầu (vd ca 3 lúc đang ca 1) và lưu trước | Kỳ chưa bắt đầu chỉ xem (cho sớm tối đa 15 phút) |
 | `runs_sync_days` < 31 | Đầu tháng hiện "bỏ sót" sai vì máy không còn lượt kiểm cũ | Hỏi máy chủ; ngày xem lại bỏ sót không vượt số ngày giữ trên máy |
+| **Khu vực phụ trách** chỉ do app ẩn đi | Quét tem máy khu vực khác vẫn mở và kiểm được; điện thoại tải về dữ liệu mọi khu vực | Máy chủ chặn: lượt kiểm, ảnh, xử lý Không đạt, lý do bỏ sót, gán mẫu, Bảng tháng, PDF của máy ngoài khu vực (*Máy này không thuộc khu vực bạn phụ trách*). Điện thoại chỉ nhận máy, lượt kiểm… của khu vực mình |
+| Bảng phiên đăng nhập, nhật ký đăng nhập, thao tác tăng mãi | Không bao giờ dọn | Tự dọn mỗi ngày (trong trigger `runBackgroundJobs`): phiên hết hạn/thu hồi quá 30 ngày, nhật ký đăng nhập quá `auth_attempts_retention_days` (90 ngày), thao tác đã ghi xong quá 90 ngày. **Nhật ký thao tác (AuditLogs) giữ nguyên** |
+
+**Lưu ý về khu vực:** người được gán khu vực (Tài khoản → Quản trị → Người dùng → *Khu vực phụ trách*) từ bản này **không kiểm được máy
+khu vực khác, kể cả khi quét tem**. Ai đi kiểm thay ở khu vực khác thì thêm khu vực đó cho họ, hoặc để trống (= mọi khu vực).
+Người không gán khu vực (owner, quản trị) không đổi gì. Khi M&E chuyển máy sang khu vực khác, điện thoại tự tải lại dữ liệu một lần.
 
 ### Cập nhật (không cần migrateSchema)
 
@@ -266,6 +272,9 @@ Không thêm màn mới; sửa các lỗi tìm được khi rà soát cả app:
    triển khai** → bút chì → **Phiên bản mới** → **Triển khai**.
 2. Nói "phát hành Checksheet" để đẩy app lên `main` → mở app → **Tải lại bản mới**.
 3. Không phải làm gì thêm. Máy đang gán từ trước giữ nguyên ngày bắt đầu; chỉ lần gán lại / dùng lại mẫu sau bản này mới đặt lại ngày bắt đầu.
+   Việc dọn dữ liệu cũ tự chạy ở lần `runBackgroundJobs` kế tiếp (trong vòng 3 giờ); muốn chạy ngay: chọn hàm **`adminCleanupNow`** → **Chạy**
+   (nhật ký in số dòng đã xóa mỗi bảng).
+4. Kiểm lại **Khu vực phụ trách** của từng người (xem lưu ý trên).
 
 ## Lưu ý an toàn
 

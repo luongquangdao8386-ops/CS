@@ -43,6 +43,7 @@ function docUpload_(ctx) {
   if (!entity || entity.archived_at) throw validationError_([fieldError_('entity_id', 'NOT_FOUND')]);
   var owner = entity.checked_by || entity.reported_by;
   if (owner !== ctx.user.user_id && Number(ctx.user.role_level) < 3) throw apiError_('FORBIDDEN');
+  if (owner !== ctx.user.user_id) assertMachineArea_(ctx, findOne_('Machines', 'machine_id', entity.machine_id));
 
   // Đã có thao tác này → không tạo thêm file
   var ex = findOne_('Operations', 'operation_id', ctx.req.operation_id);

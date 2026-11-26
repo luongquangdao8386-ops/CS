@@ -46,6 +46,7 @@ function assignmentEdit_(ctx) {
   if (!tpl) errs.push(fieldError_('template_id', 'NOT_FOUND'));
   if (!mac) errs.push(fieldError_('machine_id', 'NOT_FOUND'));
   if (errs.length) throw validationError_(errs);
+  assertMachineArea_(ctx, mac);
   var items = templateItems_(templateId, tpl.revision);
   var ov = p.overrides !== undefined ? normOverrides_(p.overrides, items, errs) : (cur ? cur.overrides_json : null);
   if (errs.length) throw validationError_(errs);
@@ -95,7 +96,7 @@ function assignmentAdd_(ctx) {
       var writes = [], added = 0, skipped = 0, reactivated = 0;
       ids.forEach(function (mid) {
         var m = macs[mid];
-        if (!m || !m.active) { skipped++; return; }
+        if (!m || !m.active || !areaAllowed_(ctx.user, m.area_id)) { skipped++; return; }
         var ex = mine.filter(function (a) { return a.machine_id === mid; });
         if (ex.some(function (a) { return a.active; })) { skipped++; return; }
         if (ex.length) {

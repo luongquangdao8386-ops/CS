@@ -526,6 +526,7 @@ function pdfGrid_(pd, g) {
 function reportPdfAction_(ctx) {
   var p = ctx.req.payload || {};
   var md = monthData_(p.machine_id, trimStr_(p.ym));
+  assertMachineAreaRead_(ctx, md.machine);
   var tpls = md.templates.filter(function (t) { return !p.template_id || t.template_id === p.template_id; });
   if (!tpls.length) throw validationError_([fieldError_('template_id', 'NOT_ASSIGNED')]);
   var code = withWriteLock_(function () {

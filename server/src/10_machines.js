@@ -65,6 +65,7 @@ function diffRows_(sheet, key, incoming, fields, counts) {
     row.updated_at = nowIso; row.updated_by = SYSTEM_USER;
     writes.push({ sheet: sheet, mode: 'update', row: row });
     if (old.active && !n.active) counts.deactivated++; else counts.updated++;
+    if (n.area_id !== undefined && String(old.area_id || '') !== String(n.area_id || '')) counts.moved = (counts.moved || 0) + 1;
   });
   Object.keys(cur).forEach(function (id) {
     var old = cur[id];
@@ -108,7 +109,11 @@ function syncMachines_(force, link) {
       .concat(diffRows_('Machines', 'machine_id', machines,
         ['machine_code', 'name_vi', 'name_zh', 'area_id', 'me_status', 'category_vi', 'category_zh', 'model', 'qr_key', 'active', 'source'], cm));
   });
-  if (writes.length) systemWrite_(writes, { action: 'machine.sync', entity_type: 'MACHINE', after_json: { areas: ca, machines: cm, rev: data.rev } });
+  if (writes.length) {
+    var rev = systemWrite_(writes, { action: 'machine.sync', entity_type: 'MACHINE', after_json: { areas: ca, machines: cm, rev: data.rev } });
+    // Máy đổi khu vực: app mọi máy tải lại toàn bộ (như khi đổi cài đặt) — người khu vực mới nhận cả gán mẫu, lượt kiểm của máy đó
+    if (cm.moved) withWriteLock_(function () { var st = readState_(); stateWrite_(st, { settings_rev: ['INT', rev] }, SYSTEM_USER); });
+  }
   noteMeSync_('OK', '', data.rev);
   return { unchanged: false, rev: data.rev, areas: ca, machines: cm, total_machines: machines.length };
 }
