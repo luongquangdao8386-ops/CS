@@ -58,7 +58,6 @@ export async function renderToday(view, { shell }) {
   const cs = currentShift();
   const sh = shifts();
   const span = cs.def ? periodSpan('SHIFT', { date: cs.work_date }, cs.shift, sh) : null;
-  const t = today();
   // Việc chờ Trưởng bộ phận
   let pend = null;
   if (lvl >= 3) pend = { abn: (await openAbnormals()).length, missed: (await missedPeriods()).length, days: (await unconfirmedDays()).length };

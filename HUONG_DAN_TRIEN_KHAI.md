@@ -260,6 +260,9 @@ Không thêm màn mới; sửa các lỗi tìm được khi rà soát cả app:
 | **Đổi kỳ** | Chọn được kỳ chưa bắt đầu (vd ca 3 lúc đang ca 1) và lưu trước | Kỳ chưa bắt đầu chỉ xem (cho sớm tối đa 15 phút) |
 | `runs_sync_days` < 31 | Đầu tháng hiện "bỏ sót" sai vì máy không còn lượt kiểm cũ | Hỏi máy chủ; ngày xem lại bỏ sót không vượt số ngày giữ trên máy |
 | **Khu vực phụ trách** chỉ do app ẩn đi | Quét tem máy khu vực khác vẫn mở và kiểm được; điện thoại tải về dữ liệu mọi khu vực | Máy chủ chặn: lượt kiểm, ảnh, xử lý Không đạt, lý do bỏ sót, gán mẫu, Bảng tháng, PDF của máy ngoài khu vực (*Máy này không thuộc khu vực bạn phụ trách*). Điện thoại chỉ nhận máy, lượt kiểm… của khu vực mình |
+| Mục **không bắt buộc** (giờ có tải, hóa chất châm, màu tem…, nhiều trong bộ mẫu ISO) để trống | Phiếu thành "Kiểm dở 9/10", máy nằm mãi ở *Chưa kiểm* | Đủ mục bắt buộc là **Xong**; mục không bắt buộc có nhãn *Không bắt buộc*. Lượt đã lưu trước bản này vẫn là Kiểm dở tới khi sửa lại |
+| Ô **Nhắc chụp ảnh khi Không đạt** (Sửa mẫu) | Không có tác dụng | Mục đó Không đạt mà chưa có ảnh → màn kiểm nhắc chụp (không chặn lưu) |
+| Nháp **thế hệ dữ liệu cũ** | Báo "Tự xóa sau N ngày" nhưng không xóa | Tự xóa khi quá 30 ngày |
 | Bảng phiên đăng nhập, nhật ký đăng nhập, thao tác tăng mãi | Không bao giờ dọn | Tự dọn mỗi ngày (trong trigger `runBackgroundJobs`): phiên hết hạn/thu hồi quá 30 ngày, nhật ký đăng nhập quá `auth_attempts_retention_days` (90 ngày), thao tác đã ghi xong quá 90 ngày. **Nhật ký thao tác (AuditLogs) giữ nguyên** |
 
 **Lưu ý về khu vực:** người được gán khu vực (Tài khoản → Quản trị → Người dùng → *Khu vực phụ trách*) từ bản này **không kiểm được máy

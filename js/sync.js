@@ -283,6 +283,22 @@ export async function flushQueue(onProgress) {
   return { sent, committed, stopped_code: null };
 }
 
+/**
+ * Nháp thế hệ dữ liệu cũ (máy chủ đã Xóa sạch/khôi phục, hoặc trang đổi máy chủ): không gửi được nữa, màn Nháp chờ gửi
+ * báo "Tự xóa sau N ngày" → xóa thật khi quá `days` ngày (tính từ lúc tạo). Trả số mục đã xóa.
+ */
+export async function pruneOldEpochDrafts(days = 30) {
+  if (!session.epoch) return 0;
+  const cutoff = Date.now() - days * 864e5;
+  let n = 0;
+  for (const o of await queueItems().catch(() => [])) {
+    if (o.dataset_epoch === session.epoch) continue;
+    const t = Date.parse(o.rejected_at || o.local_created_at || '') || 0;
+    if (t && t < cutoff) { await idb.del('cs_data', 'queue', o.operation_id).catch(() => {}); n++; }
+  }
+  return n;
+}
+
 /** Xuất dự phòng: nháp + hàng chờ ra file JSON */
 /** Xóa một nháp khỏi hàng chờ (người dùng xác nhận hai lần ở CM-04) */
 export async function deleteQueued(operationId) {

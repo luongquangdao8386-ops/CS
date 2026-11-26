@@ -48,7 +48,7 @@ function evaluateRun_(items, overrides, inputs) {
   var byKey = {};
   (inputs || []).forEach(function (x) { if (x && x.item_key) byKey[x.item_key] = x; });
   var errs = [];
-  var c = { filled: 0, total: 0, fail: 0, warn: 0 };
+  var c = { filled: 0, total: 0, fail: 0, warn: 0, reqTotal: 0, reqFilled: 0 };
   var results = [];
   items.forEach(function (ti) {
     var it = effItem_(ti, overrides);
@@ -69,6 +69,8 @@ function evaluateRun_(items, overrides, inputs) {
     if (it.overridden) r.overridden = true;
     c.total++;
     if (j.result !== 'EMPTY') c.filled++;
+    // Mục bắt buộc quyết định Xong/Kiểm dở; mục không bắt buộc (giờ có tải, hóa chất châm, "nếu có"…) để trống vẫn là Xong
+    if (it.required !== false) { c.reqTotal++; if (j.result !== 'EMPTY') c.reqFilled++; }
     if (j.result === 'FAIL') { c.fail++; if (!r.note) errs.push(fieldError_('results.' + i + '.note', 'FAIL_NOTE_REQUIRED')); }
     if (j.result === 'WARN') c.warn++;
     results.push(r);
@@ -136,7 +138,7 @@ function checkSubmit_(ctx) {
       var row = Object.assign({}, now || {}, {
         run_id: p.run_id, machine_id: asg.machine_id, template_id: tpl.template_id, template_revision: rev, assignment_id: asg.assignment_id,
         frequency: freq, period_key: periodKey, work_date: wd, shift: shift,
-        status: ev.counts.filled === ev.counts.total ? 'DONE' : 'PARTIAL', results_json: ev.results,
+        status: ev.counts.filled > 0 && ev.counts.reqFilled === ev.counts.reqTotal ? 'DONE' : 'PARTIAL', results_json: ev.results,
         filled_count: ev.counts.filled, total_count: ev.counts.total, fail_count: ev.counts.fail, warn_count: ev.counts.warn,
         checked_by: now ? now.checked_by : ctx.user.user_id, checked_at: now ? now.checked_at : isoVN_(checkedAt),
         note: trimStr_(p.note).slice(0, 500)

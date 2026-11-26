@@ -8,7 +8,7 @@ import { bilingualInputs, wireForm, showErrors, writeOnline, writeWithPin, write
 import { app, afterCommit } from '../app.js';
 import { navigate } from '../router.js';
 import { itemEditorHtml, readItem, wireItems, GROUPS } from '../std-edit.js';
-import { stdText } from '../judge.js';
+import { stdText, tplShifts } from '../judge.js';
 
 const FREQS = ['SHIFT', 'DAY', 'WEEK', 'MONTH'];
 let showArchived = false;
@@ -20,7 +20,7 @@ function needC3(view) {
 }
 
 export function freqLabel(tpl) {
-  const s = tpl.frequency === 'SHIFT' && tpl.shifts ? ' · ' + String(tpl.shifts).split(',').map((x) => biText('shift.n', { N: x })).join(', ') : '';
+  const s = tpl.frequency === 'SHIFT' && tpl.shifts ? ' · ' + tplShifts(tpl, shifts()).map((x) => biText('shift.n', { N: x })).join(', ') : '';
   return `${bi('freq_each.' + tpl.frequency)}${esc(s)}`;
 }
 

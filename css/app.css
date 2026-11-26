@@ -1113,6 +1113,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .ci-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .ci-name .vi { font-weight: 700; }
 .ci-name .zh { font-size: 0.875rem; color: var(--graphite); }
+.ci-name .ci-opt { margin-top: 4px; }
 .ci-pill { flex: none; font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #EEF1F4; color: var(--graphite); }
 .ci-pill .vi, .ci-pill .zh { display: inline; }
 .ci.st-ok .ci-pill { background: var(--ok-bg); color: var(--green); }

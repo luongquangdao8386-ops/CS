@@ -39,7 +39,7 @@ export function periodLabel(freq, workDate, shift) {
 function itemsFromRun(run, tplByKey) {
   return (run.results_json || []).map((r) => {
     const ti = tplByKey.get(r.item_key) || {};
-    return { ...(r.std || {}), item_key: r.item_key, step_no: r.step_no, group_key: r.group_key, name_vi: r.name_vi, name_zh: r.name_zh, input_type: r.input_type, unit: r.unit, how_vi: ti.how_vi || '', how_zh: ti.how_zh || '', photo_on_fail: !!ti.photo_on_fail };
+    return { ...(r.std || {}), item_key: r.item_key, step_no: r.step_no, group_key: r.group_key, name_vi: r.name_vi, name_zh: r.name_zh, input_type: r.input_type, unit: r.unit, how_vi: ti.how_vi || '', how_zh: ti.how_zh || '', photo_on_fail: !!ti.photo_on_fail, required: ti.required !== false };
   });
 }
 
@@ -205,7 +205,7 @@ export async function renderCheck(view, { shell, params, query }) {
     const how = it.how_vi || it.how_zh ? `<div class="ci-how muted small">${bi('chk.how')}: ${esc([it.how_vi, it.how_zh].filter(Boolean).join(' · '))}</div>` : '';
     const nDocs = docs.filter((d) => d.item_key === it.item_key).length;
     return `<div class="ci" id="ci-${i}" data-i="${i}">
-      <div class="ci-head"><div class="ci-name"><div class="vi">${esc(it.name_vi || it.name_zh)}</div>${it.name_zh && it.name_vi ? `<div class="zh">${esc(it.name_zh)}</div>` : ''}</div><span class="ci-pill" id="pill-${i}"></span></div>
+      <div class="ci-head"><div class="ci-name"><div class="vi">${esc(it.name_vi || it.name_zh)}</div>${it.name_zh && it.name_vi ? `<div class="zh">${esc(it.name_zh)}</div>` : ''}${it.required === false ? `<span class="tag ci-opt">${bi('chk.optional')}</span>` : ''}</div><span class="ci-pill" id="pill-${i}"></span></div>
       ${stdLine(it) ? `<div class="ci-std small">${stdLine(it)}</div>` : (it.input_type === 'PASS_FAIL' ? '' : `<div class="ci-std small"><span class="muted">${bi('chk.no_std')}</span></div>`)}
       ${inputHtml(it, i)}
       <div class="ci-msg" id="msg-${i}" hidden></div>
@@ -215,6 +215,7 @@ export async function renderCheck(view, { shell, params, query }) {
         <textarea class="inp" id="n-${i}" data-i="${i}" data-f="note" rows="2" maxlength="500"${ro ? ' disabled' : ''}>${esc(vals[it.item_key].note || '')}</textarea>
         ${ro ? '' : `<div class="row ci-photo"><label class="btn small">${ICON.camera}<span>${bi('chk.photo')}</span><input type="file" accept="image/*" capture="environment" data-photo="${i}" hidden></label><span class="muted small" id="pc-${i}"></span></div>`}
         ${nDocs ? `<div class="muted small">${bi('chk.photos_saved', { N: nDocs })}</div>` : ''}
+        ${ro || !it.photo_on_fail || nDocs ? '' : `<div class="small t-amber-text ci-photo-need" id="phn-${i}" hidden>${bi('chk.photo_remind')}</div>`}
         <div class="muted small ci-tell" id="tell-${i}" hidden>${bi('chk.tell_c3')}</div>
       </div>
       ${ro ? '' : `<button type="button" class="link-btn small" id="addn-${i}" data-addnote="${i}">＋ ${bi('chk.add_note')}</button>`}
@@ -282,10 +283,14 @@ export async function renderCheck(view, { shell, params, query }) {
     if (add) add.hidden = wantNote;
     const pc = $('#pc-' + i, R);
     if (pc) pc.textContent = (photos[it.item_key] || []).length ? biText('chk.photo_n', { N: photos[it.item_key].length }) : '';
+    // Mẫu đánh dấu "Nhắc chụp ảnh khi Không đạt": nhắc tới khi có ảnh (không chặn lưu)
+    const phn = $('#phn-' + i, R);
+    if (phn) phn.hidden = !fail || (photos[it.item_key] || []).length > 0;
     card.classList.toggle('need-note', fail && !(v.note || '').trim() && card.dataset.tried === '1');
   };
   const summary = () => {
     const filled = results.filter((j) => j && j.result !== 'EMPTY' && j.result !== 'BAD').length;
+    const reqLeft = items.filter((it, k) => it.required !== false && (!results[k] || results[k].result === 'EMPTY' || results[k].result === 'BAD')).length;
     const fail = results.filter((j) => j && j.result === 'FAIL').length;
     const warn = results.filter((j) => j && j.result === 'WARN').length;
     const pct = Math.round(filled / items.length * 100);
@@ -296,10 +301,9 @@ export async function renderCheck(view, { shell, params, query }) {
       $('#ck-s-filled', R).innerHTML = bi('chk.filled_n', { N: filled, M: items.length });
       $('#ck-s-fail', R).innerHTML = fail ? bi('chk.fail_n', { N: fail }) : '';
       $('#ck-s-warn', R).innerHTML = warn ? bi('chk.warn_n', { N: warn }) : '';
-      const left = items.length - filled;
       const lb = $('#ck-left', R);
-      lb.hidden = !left || !filled;
-      lb.innerHTML = left ? bi('chk.left_n', { N: left }) : '';
+      lb.hidden = !reqLeft || !filled;
+      lb.innerHTML = reqLeft ? bi('chk.left_n', { N: reqLeft }) : '';
     }
     return { filled, fail, warn };
   };

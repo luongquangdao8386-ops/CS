@@ -1,6 +1,6 @@
 // Điều khiển app sau đăng nhập: khung, định tuyến, đồng bộ nền, quét QR máy
 import { bi, esc, session, resMsg } from './core.js';
-import { getMeta, pullChanges, queueItems, flushQueue, takeWriteChanges } from './sync.js';
+import { getMeta, pullChanges, queueItems, flushQueue, takeWriteChanges, pruneOldEpochDrafts } from './sync.js';
 import { mountShell, isWide } from './shell.js';
 import { route, match, currentPath, queryParams, navigate, back, startRouter, refresh, lastNavKind } from './router.js';
 import { invalidate, boot as bootData, dueList, pendingCount } from './data.js';
@@ -201,6 +201,7 @@ export async function enterApp(root, { offline = false, maintenance = false } = 
   if (!routesReady) { registerRoutes(); routesReady = true; }
   app.shell = mountShell(root, { env: b.env, onScan: scanAndOpen });
   app.shell.setSessionWarn(session.expires_at, () => app.onRelogin && app.onRelogin());
+  await pruneOldEpochDrafts().catch(() => 0);
   await updateSyncStatus();
   lastWide = isWide();
   startRouter(renderRoute);
