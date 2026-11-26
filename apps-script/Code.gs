@@ -1066,11 +1066,13 @@ var SUB_MSG = {
   FAIL_NOTE_REQUIRED: ['Mục Không đạt phải có ghi chú', '不合格项目须填写备注'],
   PERIOD_INVALID: ['Ngày/ca của lượt kiểm không hợp lệ', '点检日期/班次无效'],
   PERIOD_TOO_OLD: ['Lượt kiểm quá cũ để ghi', '点检记录过旧，无法保存'],
+  PERIOD_NOT_STARTED: ['Kỳ này chưa bắt đầu — chưa kiểm được', '该周期尚未开始，暂不能点检'],
   RUN_EXISTS: ['Máy này đã có người kiểm trong ca/kỳ này', '该设备本班次/周期已有人点检'],
   RUN_LOCKED: ['Ngày này trưởng bộ phận đã xác nhận, không sửa được', '该日已由部门主管确认，不能修改'],
   NOT_ASSIGNED: ['Máy chưa được gán mẫu này hoặc đã ngừng', '设备未分配该模板或已停用'],
   MACHINE_INACTIVE: ['Máy đã ngừng dùng', '设备已停用'],
   AREA_FORBIDDEN: ['Máy này không thuộc khu vực bạn phụ trách', '该设备不属于您负责的区域'],
+  RESULTS_TOO_LARGE: ['Phiếu quá dài: rút gọn bớt các ghi chú rồi lưu lại', '点检表内容过长：请缩短备注后重新保存'],
   TEMPLATE_INACTIVE: ['Mẫu đã ngừng dùng', '模板已停用'],
   REVISION_UNKNOWN: ['Không có phiên bản mẫu này', '不存在该模板版本'],
   ASSIGNMENT_EXISTS: ['Máy đã được gán mẫu này', '设备已分配该模板'],
@@ -3982,6 +3984,13 @@ function todayVN_() {
   return dateVN_(now_());
 }
 
+/** Thời điểm hiện tại (ms) dời theo TEST_TODAY ở THỬ — như nowMs() của app (dời cùng số ngày) */
+function nowEffMs_() {
+  var real = dateVN_(now_());
+  var off = Math.round((Date.parse(todayVN_() + 'T00:00:00Z') - Date.parse(real + 'T00:00:00Z')) / 86400000);
+  return now_().getTime() + off * 86400000;
+}
+
 /**
  * Các kỳ (cột) của bảng tháng theo tần suất: ngày (theo ca hoặc cả ngày), tuần ISO có ngày trong tháng, hoặc cả tháng.
  * Trả [{key, label, date, last}] — date: ngày đầu của kỳ trong tháng, last: ngày cuối của kỳ trong tháng.
@@ -4151,11 +4160,15 @@ function checkSubmit_(ctx) {
     var back = Number(setting_('check_backdate_days') || 7);
     if (wd > addDaysIso_(today, 1)) errs.push(fieldError_('work_date', 'PERIOD_INVALID'));
     else if (wd < addDaysIso_(today, -back)) errs.push(fieldError_('work_date', 'PERIOD_TOO_OLD'));
+    // Kỳ chưa bắt đầu (vd ca 3 lúc đang ca 1, đồng hồ điện thoại chạy nhanh): cho sớm tối đa 15 phút như app
+    else if (periodSpan_(freq, { date: wd, last: wd }, shift).start > nowEffMs_() + 15 * 60000) errs.push(fieldError_('work_date', 'PERIOD_NOT_STARTED'));
   }
   if (errs.length) throw validationError_(errs);
   var periodKey = periodKey_(freq, wd, shift);
   var ev = evaluateRun_(items, asg.overrides_json, p.results);
   if (ev.errs.length) throw validationError_(ev.errs);
+  // Ô Sheet tối đa 50 000 ký tự: phiếu quá dài (rất nhiều ghi chú dài) báo rõ thay vì "Lỗi máy chủ"
+  if (JSON.stringify(ev.results).length > 48000) throw validationError_([fieldError_('results', 'RESULTS_TOO_LARGE')]);
   var checkedAt = parseTime_(p.checked_at);
   if (!checkedAt || checkedAt.getTime() > now_().getTime() + 15 * 60000) checkedAt = now_();
   return executeWrite_(ctx, {
@@ -5679,7 +5692,7 @@ function monthGrid_(md, tpl, shift, people) {
       if (!keys.some(function (k) { return k.key === x.item_key; })) keys.push({ key: x.item_key, vi: x.name_vi, zh: x.name_zh, std: x.std_vi || '' });
     });
   });
-  var nowMs = now_().getTime();
+  var nowMs = nowEffMs_(); // THỬ: dời theo TEST_TODAY như Bảng tháng trên app
   var counts = { due: 0, done: 0, fail: 0, warn: 0 };
   var state = periods.map(function (per) {
     var sp = periodSpan_(tpl.frequency, per, shift);

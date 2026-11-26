@@ -243,7 +243,9 @@ export const idb = {
 /* ---------------- Gọi máy chủ (3.15) ---------------- */
 export const session = { token: null, epoch: null, user: null, settings: {}, reauth: null, kind: null };
 
-const LONG_ACTIONS = /^(doc\.upload|sync\.bootstrap|report\.|machine\.sync|me\.link|check\.month|template\.(edit|purge))/;
+// Action có thể chạy lâu trên Apps Script (tạo cả bộ mẫu, gán nhiều máy…): chờ client_long_timeout_seconds thay vì 30 giây,
+// kẻo app báo lỗi mạng trong khi máy chủ vẫn đang ghi
+const LONG_ACTIONS = /^(doc\.upload|sync\.bootstrap|report\.|machine\.sync|me\.link|check\.month|template\.(edit|purge|iso)|assignment\.add|day\.confirm)/;
 let running = 0;
 const waiters = [];
 async function slot() {

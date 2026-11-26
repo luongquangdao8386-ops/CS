@@ -108,8 +108,13 @@ test('bảng lượt kiểm lớn: bootstrap chỉ gửi lượt trong cửa s�
   assert.deepEqual(b.data.records.ABNORMAL.map((a) => a.abnormal_id).sort(), [oldOpen.abnormal_id, recent.abnormal_id].sort());
   // Lượt mới: changes chỉ có lượt đó (không đọc lại 400 lượt cũ)
   const cursor = Number(b.data.sync_cursor);
+  // Kỳ chưa bắt đầu (ngày mai) bị từ chối; lượt mới ở máy khác hôm nay
+  const rf = owner.write('check.submit', { run_id: uuid(), assignment_id: aid, template_revision: 1, work_date: '2026-10-29', results: [{ item_key: items[0].item_key, value: 50 }] });
+  assert.equal(rf.errors[0].code, 'PERIOD_NOT_STARTED');
+  const aid2 = uuid();
+  ok(owner.write('assignment.edit', { assignment_id: aid2, machine_id: env.rows('Machines')[1].machine_id, template_id: id }));
   const rid = uuid();
-  ok(owner.write('check.submit', { run_id: rid, assignment_id: aid, template_revision: 1, work_date: '2026-10-29', results: [{ item_key: items[0].item_key, value: 50 }] }));
+  ok(owner.write('check.submit', { run_id: rid, assignment_id: aid2, template_revision: 1, work_date: '2026-10-28', results: [{ item_key: items[0].item_key, value: 50 }] }));
   const c = reads(env, () => ok(owner.call('sync.changes', { cursor })));
   assert.deepEqual(c.out.data.changes.filter((x) => x.entity_type === 'RUN').map((x) => x.entity_id), [rid]);
   assert.ok(c.n < 20, 'sync.changes đọc ' + c.n + ' lần');
@@ -258,4 +263,16 @@ test('lượt "Kiểm dở" cũ chỉ vì mục không bắt buộc để trốn
   assert.equal(env.rows('Runs').find((x) => x.run_id === b).status, 'PARTIAL', 'thiếu mục bắt buộc: giữ Kiểm dở');
   g.dbReset_();
   assert.equal(g.recomputePartialRunsOnce_(), null, 'chỉ chạy một lần');
+});
+
+test('THỬ đặt TEST_TODAY: lượt kiểm của "hôm nay giả" không bị coi là kỳ chưa bắt đầu', () => {
+  const { env, owner } = setup();
+  const { id, items } = makeTemplate(owner);
+  const mac = env.rows('Machines')[0];
+  const aid = uuid();
+  ok(owner.write('assignment.edit', { assignment_id: aid, machine_id: mac.machine_id, template_id: id }));
+  env.props.setProperty('TEST_TODAY', '2026-11-05');
+  ok(owner.write('check.submit', { run_id: uuid(), assignment_id: aid, template_revision: 1, work_date: '2026-11-05', results: [{ item_key: items[0].item_key, value: 50 }] }));
+  const r = owner.write('check.submit', { run_id: uuid(), assignment_id: aid, template_revision: 1, work_date: '2026-11-06', results: [{ item_key: items[0].item_key, value: 50 }] });
+  assert.equal(r.errors[0].code, 'PERIOD_NOT_STARTED');
 });

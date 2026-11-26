@@ -257,7 +257,9 @@ Không thêm màn mới; sửa các lỗi tìm được khi rà soát cả app:
 | Bỏ sót sai khi **gán lại** máy đã ngừng gán, **dùng lại** mẫu đã ngừng | Những ngày đã ngừng thành "bỏ sót" (Chờ xử lý bắt ghi lý do, PDF tô "–") | Tính kỳ từ ngày gán lại / dùng lại. Đổi lại: kỳ bỏ sót *trước lúc ngừng* trong tháng đó không còn tô "–" |
 | Bớt ca trong **Giờ ca** (vd 3 ca → 2 kíp 12 giờ) | Mẫu "ca 1, 2, 3" vẫn còn ca 3 ma: mỗi ngày báo bỏ sót ca 3, Bảng tháng/PDF có bảng ca 3 trống | Ca không còn trong Giờ ca thì không tính; lượt kiểm cũ của ca đó vẫn hiện |
 | Số ngày **ghi bù** | App luôn cho 7 ngày dù Cấu hình `check_backdate_days` khác → phiếu bị từ chối hoặc không ghi bù được | App theo đúng Cấu hình |
-| **Đổi kỳ** | Chọn được kỳ chưa bắt đầu (vd ca 3 lúc đang ca 1) và lưu trước | Kỳ chưa bắt đầu chỉ xem (cho sớm tối đa 15 phút) |
+| **Đổi kỳ** | Chọn được kỳ chưa bắt đầu (vd ca 3 lúc đang ca 1) và lưu trước | Kỳ chưa bắt đầu chỉ xem (cho sớm tối đa 15 phút); máy chủ cũng từ chối (điện thoại chỉnh giờ sai) |
+| Tạo cả bộ mẫu, gán nhiều máy, xác nhận ngày | App chỉ chờ 30 giây → có thể báo lỗi mạng trong khi máy chủ vẫn đang ghi | Chờ như các thao tác dài (55 giây) |
+| Phiếu rất nhiều ghi chú dài (vượt 50 000 ký tự một ô Sheet) | *Lỗi máy chủ* | Báo *Phiếu quá dài: rút gọn bớt các ghi chú* |
 | `runs_sync_days` < 31 | Đầu tháng hiện "bỏ sót" sai vì máy không còn lượt kiểm cũ | Hỏi máy chủ; ngày xem lại bỏ sót không vượt số ngày giữ trên máy |
 | **Khu vực phụ trách** chỉ do app ẩn đi | Quét tem máy khu vực khác vẫn mở và kiểm được; điện thoại tải về dữ liệu mọi khu vực | Máy chủ chặn: lượt kiểm, ảnh, xử lý Không đạt, lý do bỏ sót, gán mẫu, Bảng tháng, PDF của máy ngoài khu vực (*Máy này không thuộc khu vực bạn phụ trách*). Điện thoại chỉ nhận máy, lượt kiểm… của khu vực mình |
 | Mục **không bắt buộc** (giờ có tải, hóa chất châm, màu tem…, nhiều trong bộ mẫu ISO) để trống | Phiếu thành "Kiểm dở 9/10", máy nằm mãi ở *Chưa kiểm* | Đủ mục bắt buộc là **Xong**; mục không bắt buộc có nhãn *Không bắt buộc*. Lượt đã lưu trước bản này được máy chủ tự tính lại một lần (trong vòng 3 giờ sau khi cập nhật; chạy ngay: hàm `adminRecomputeRunStatus`) |

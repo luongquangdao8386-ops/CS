@@ -236,6 +236,13 @@ function todayVN_() {
   return dateVN_(now_());
 }
 
+/** Thời điểm hiện tại (ms) dời theo TEST_TODAY ở THỬ — như nowMs() của app (dời cùng số ngày) */
+function nowEffMs_() {
+  var real = dateVN_(now_());
+  var off = Math.round((Date.parse(todayVN_() + 'T00:00:00Z') - Date.parse(real + 'T00:00:00Z')) / 86400000);
+  return now_().getTime() + off * 86400000;
+}
+
 /**
  * Các kỳ (cột) của bảng tháng theo tần suất: ngày (theo ca hoặc cả ngày), tuần ISO có ngày trong tháng, hoặc cả tháng.
  * Trả [{key, label, date, last}] — date: ngày đầu của kỳ trong tháng, last: ngày cuối của kỳ trong tháng.

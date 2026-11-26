@@ -437,7 +437,7 @@ function monthGrid_(md, tpl, shift, people) {
       if (!keys.some(function (k) { return k.key === x.item_key; })) keys.push({ key: x.item_key, vi: x.name_vi, zh: x.name_zh, std: x.std_vi || '' });
     });
   });
-  var nowMs = now_().getTime();
+  var nowMs = nowEffMs_(); // THỬ: dời theo TEST_TODAY như Bảng tháng trên app
   var counts = { due: 0, done: 0, fail: 0, warn: 0 };
   var state = periods.map(function (per) {
     var sp = periodSpan_(tpl.frequency, per, shift);

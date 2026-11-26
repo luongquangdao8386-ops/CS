@@ -114,11 +114,15 @@ function checkSubmit_(ctx) {
     var back = Number(setting_('check_backdate_days') || 7);
     if (wd > addDaysIso_(today, 1)) errs.push(fieldError_('work_date', 'PERIOD_INVALID'));
     else if (wd < addDaysIso_(today, -back)) errs.push(fieldError_('work_date', 'PERIOD_TOO_OLD'));
+    // Kỳ chưa bắt đầu (vd ca 3 lúc đang ca 1, đồng hồ điện thoại chạy nhanh): cho sớm tối đa 15 phút như app
+    else if (periodSpan_(freq, { date: wd, last: wd }, shift).start > nowEffMs_() + 15 * 60000) errs.push(fieldError_('work_date', 'PERIOD_NOT_STARTED'));
   }
   if (errs.length) throw validationError_(errs);
   var periodKey = periodKey_(freq, wd, shift);
   var ev = evaluateRun_(items, asg.overrides_json, p.results);
   if (ev.errs.length) throw validationError_(ev.errs);
+  // Ô Sheet tối đa 50 000 ký tự: phiếu quá dài (rất nhiều ghi chú dài) báo rõ thay vì "Lỗi máy chủ"
+  if (JSON.stringify(ev.results).length > 48000) throw validationError_([fieldError_('results', 'RESULTS_TOO_LARGE')]);
   var checkedAt = parseTime_(p.checked_at);
   if (!checkedAt || checkedAt.getTime() > now_().getTime() + 15 * 60000) checkedAt = now_();
   return executeWrite_(ctx, {
