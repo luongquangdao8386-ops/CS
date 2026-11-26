@@ -229,3 +229,33 @@ test('Xong / Kiểm dở theo mục bắt buộc: mục không bắt buộc đ�
   run = env.rows('Runs').find((x) => x.run_id === run2);
   assert.equal(run.status, 'PARTIAL');
 });
+
+test('lượt "Kiểm dở" cũ chỉ vì mục không bắt buộc để trống: tự tính lại thành Xong một lần (đổi sync_revision, giữ record_version)', () => {
+  const { env, owner } = setup();
+  const id = uuid();
+  const r = ok(owner.write('template.edit', { template_id: id, name_vi: 'Có mục không bắt buộc', frequency: 'DAY', items: [
+    { name_vi: 'Nhiệt độ dầu', input_type: 'NUMBER', unit: '°C', std_type: 'MAX', std_max: 60 },
+    { name_vi: 'Giờ có tải', input_type: 'NUMBER', unit: 'h', std_type: 'NONE', required: false }
+  ] }));
+  const [k1, k2] = r.data.items.map((x) => x.item_key);
+  const mac = env.rows('Machines')[0];
+  const aid = uuid();
+  ok(owner.write('assignment.edit', { assignment_id: aid, machine_id: mac.machine_id, template_id: id }));
+  const a = uuid(), b = uuid();
+  ok(owner.write('check.submit', { run_id: a, assignment_id: aid, template_revision: 1, work_date: '2026-10-28', results: [{ item_key: k1, value: 50 }] }));
+  ok(owner.write('check.submit', { run_id: b, assignment_id: aid, template_revision: 1, work_date: '2026-10-27', results: [{ item_key: k2, value: 3 }] }));
+  // Giả lập dữ liệu trước d1.6: lượt a bị ghi Kiểm dở
+  const g = env.g;
+  g.dbReset_();
+  g.withWriteLock_(() => g.writeCells_('Runs', g.findRowNums_('Runs', 'run_id', a)[0], { status: 'PARTIAL' }));
+  const before = env.rows('Runs').find((x) => x.run_id === a);
+  g.dbReset_();
+  assert.equal(g.recomputePartialRunsOnce_(), 1);
+  const after = env.rows('Runs').find((x) => x.run_id === a);
+  assert.equal(after.status, 'DONE');
+  assert.equal(after.record_version, before.record_version);
+  assert.ok(after.sync_revision > before.sync_revision);
+  assert.equal(env.rows('Runs').find((x) => x.run_id === b).status, 'PARTIAL', 'thiếu mục bắt buộc: giữ Kiểm dở');
+  g.dbReset_();
+  assert.equal(g.recomputePartialRunsOnce_(), null, 'chỉ chạy một lần');
+});

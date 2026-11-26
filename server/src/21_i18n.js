@@ -120,6 +120,7 @@ function runBackgroundJobs() {
   dbReset_();
   // Dọn phiên, nhật ký đăng nhập, thao tác cũ (tối đa 1 lần/ngày); lỗi không chặn dịch bù
   try { cleanupOld_(false); } catch (e) { console.warn('cleanupOld_ ' + (e && e.message || e)); }
+  try { recomputePartialRunsOnce_(); } catch (e) { console.warn('recomputePartialRunsOnce_ ' + (e && e.message || e)); }
   if (!mtEnabled_()) { recordTriggerRun_('runBackgroundJobs', t0); return; }
   var done = 0;
   Object.keys(MT_SHEETS_).forEach(function (sheet) {
